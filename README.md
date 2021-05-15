@@ -153,3 +153,8 @@ Columnar representation:
 	protobuf serialization time: 0.004060576s		(32.21719233921493 times faster)
 	protobuf deserialization time: 0.008957494s		(22.356483520949052 times faster)
 ```
+
+To reproduce this benchmark you need:
+- Install Rust: ```curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh```
+- Clone this repo
+- ```cargo run --release```
