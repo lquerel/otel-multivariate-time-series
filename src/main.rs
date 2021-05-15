@@ -88,11 +88,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         assert_eq!("tbd".to_string(), resource_metrics.schema_url);
         let deser_time = Instant::now();
         println!("Columnar representation:");
-        println!("\tuncompressed size: {} bytes ({} times better)", uncompressed_size, std_uncompressed_size/uncompressed_size);
-        println!("\tcompressed size: {} bytes ({} times better)", compressed_size, std_compressed_size/compressed_size);
-        println!("\tprotobuf creation time: {}s ({} times better)", (gen_time - before_gen_time).as_secs_f64(), std_gen_time.as_secs_f64()/(gen_time - before_gen_time).as_secs_f64());
-        println!("\tprotobuf serialization time: {}s ({} times better)", (ser_time - before_ser_time).as_secs_f64(), std_ser_time.as_secs_f64()/(ser_time - before_ser_time).as_secs_f64());
-        println!("\tprotobuf deserialization time: {}s ({} times better)", (deser_time - before_deser_time).as_secs_f64(), std_deser_time.as_secs_f64()/(deser_time - before_deser_time).as_secs_f64());
+        println!("\tuncompressed size: {} bytes\t\t\t\t({} times smaller)", uncompressed_size, std_uncompressed_size/uncompressed_size);
+        println!("\tcompressed size: {} bytes\t\t\t\t({} times smaller)", compressed_size, std_compressed_size/compressed_size);
+        println!("\tprotobuf creation time: {}s\t\t\t({} times faster)", (gen_time - before_gen_time).as_secs_f64(), std_gen_time.as_secs_f64()/(gen_time - before_gen_time).as_secs_f64());
+        println!("\tprotobuf serialization time: {}s\t\t({} times faster)", (ser_time - before_ser_time).as_secs_f64(), std_ser_time.as_secs_f64()/(ser_time - before_ser_time).as_secs_f64());
+        println!("\tprotobuf deserialization time: {}s\t\t({} times faster)", (deser_time - before_deser_time).as_secs_f64(), std_deser_time.as_secs_f64()/(deser_time - before_deser_time).as_secs_f64());
 
         println!();
     }
