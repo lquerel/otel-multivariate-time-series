@@ -14,7 +14,8 @@ It's interesting to observe that the uncompressed size of the initial json file 
 * **4 times smaller** than the protobuf standard representation
 * **6.1 times bigger** than the protobuf columnar representation
 
-Overall the columnar representation is definitively better in every dimensions (time and space).
+Overall the columnar representation is definitively better in every dimension (time and space), see the performance results in the right column.
+
 
 ```
 Multivariate time-series experiment (batch of 1000 data points)
