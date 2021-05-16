@@ -9,6 +9,7 @@ use std::io::Write;
 use std::time::Instant;
 use crate::opentelemetry::proto::metrics::v1::ResourceMetrics;
 use bytes::Bytes;
+use plotters::prelude::*;
 
 mod multivariate_ts_gen;
 mod metrics_std;
@@ -32,15 +33,12 @@ pub mod opentelemetry {
             pub mod v1 {
                 include!(concat!(env!("OUT_DIR"), "/opentelemetry.proto.metrics.v1.rs"));
             }
-            pub mod experimental {
-                include!(concat!(env!("OUT_DIR"), "/opentelemetry.proto.metrics.experimental.rs"));
-            }
         }
     }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    for i in 1..10 {
+    for i in 1..1 {
         let time_series = MultivariateDataPoint::load_time_series("multivariate-time-series.json", i*1000)?;
         println!("Multivariate time-series experiment (batch of {} data points)", time_series.len());
 
