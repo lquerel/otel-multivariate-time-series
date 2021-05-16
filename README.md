@@ -16,6 +16,7 @@ It's interesting to observe that the uncompressed size of the initial json file 
 
 Overall the columnar representation is definitively better in every dimension (time and space), see the performance results in the right column.
 
+![charts](images/charts.png)
 
 ```
 Multivariate time-series experiment (batch of 1000 data points)
