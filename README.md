@@ -3,24 +3,28 @@
 ## Introduction
 The current OTEL protocol doesn't natively support multivariate time-series. 
 This repository adds the support for multivariate time-series at the protocol level in a backward compatible manner. 
-An [OTEP document](https://github.com/lquerel/oteps/blob/main/text/metrics/0000-multivariate-timeseries.md) is visible for more details on why multivariate time-series are important. 
+Please refer to this [OTEP document](https://github.com/lquerel/oteps/blob/main/text/metrics/0000-multivariate-timeseries.md) 
+for a more detailed explanation on why the support pf multivariate time-series is important. 
 
-Status: This IS a work-in-progress work and IS NOT an official implementation of the OpenTelemetry protocol. Histogram and summary are not yet supported.
+## Status
+This IS a work-in-progress work and IS NOT an official implementation of the OpenTelemetry protocol. 
+Histogram and summary are not yet supported. The following benchmark 
 
 ## Dataset
 * 10000 data points represented in JSON (size uncompressed 6009735 bytes).
-* Number of attributes per data point = 9
+* Number of attributes (i.e. categorical dimension) per data point = 9
 * Number of metrics per data point = 8
 
 ## Results
-* The standard representation is using the current implementation of the OTEL protocol.
-* The columnar representation is using a compatible evolution of the current implementation of the OTEL protocol.
+* The *standard* representation is using the current implementation of the OTEL protocol.
+* The *columnar* representation is using a compatible evolution of the current implementation of the OTEL protocol.
 
 It's interesting to observe that the uncompressed size of the initial json file (6009735 bytes) is:
 * **4 times smaller** than the protobuf standard representation
 * **6.1 times bigger** than the protobuf columnar representation
 
-Overall the columnar representation is definitively better in every dimension (time and space), see the performance results in the right column.
+Overall the columnar representation is definitively better in every dimension (time and space), 
+see the performance results in the right column.
 
 ![charts](images/charts.png)
 
@@ -161,7 +165,16 @@ Columnar representation:
 	protobuf deserialization time: 0.008957494s		(22.356483520949052 times faster)
 ```
 
-To reproduce this benchmark you need:
+## Possible future evolutions
+- Improve data encoding
+  - For the attributes we could use a dictionary encoding
+  - For the timestamps we could use the delta or the double-delta encoding
+  - For the metrics we could use the delta or the double-delta encoding  
+- Zero-copy option when support by the language specific protobuf library
+
+These different encodings could be specified directly in the OTEL protobuf.   
+
+## Steps to reproduce this benchmark
 - Install Rust: ```curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh```
 - Clone this repo
 - ```cargo run --release```
