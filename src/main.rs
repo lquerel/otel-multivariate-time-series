@@ -74,15 +74,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         let std_deser_time = deser_time - before_deser_time;
         std_uncompressed_size_vec.push(((i * 1000) as i64, std_uncompressed_size as i64));
         std_compressed_size_vec.push(((i * 1000) as i64, std_compressed_size as i64));
-        std_creation_time_vec.push(((i * 1000) as i64, (gen_time - before_gen_time).as_nanos()));
-        std_ser_time_vec.push(((i * 1000) as i64, (ser_time - before_ser_time).as_micros()));
-        std_deser_time_vec.push(((i * 1000) as i64, (deser_time - before_deser_time).as_micros()));
+        std_creation_time_vec.push(((i * 1000) as i64, std_gen_time.as_micros()));
+        std_ser_time_vec.push(((i * 1000) as i64, std_ser_time.as_micros()));
+        std_deser_time_vec.push(((i * 1000) as i64, std_deser_time.as_micros()));
         println!("Standard representation:");
         println!("\tuncompressed size: {} bytes", std_uncompressed_size);
         println!("\tcompressed size: {} bytes", std_compressed_size);
-        println!("\tprotobuf creation time: {}μs", (gen_time - before_gen_time).as_nanos());
-        println!("\tprotobuf serialization time: {}μs", (ser_time - before_ser_time).as_micros());
-        println!("\tprotobuf deserialization time: {}μs", (deser_time - before_deser_time).as_micros());
+        println!("\tprotobuf creation time: {}μs", std_gen_time.as_micros());
+        println!("\tprotobuf serialization time: {}μs", std_ser_time.as_micros());
+        println!("\tprotobuf deserialization time: {}μs", std_deser_time.as_micros());
         println!();
 
         let before_gen_time = Instant::now();
@@ -107,8 +107,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         columnar_ser_time_vec.push(((i * 1000) as i64, (ser_time - before_ser_time).as_micros()));
         columnar_deser_time_vec.push(((i * 1000) as i64, (deser_time - before_deser_time).as_micros()));
         println!("Columnar representation:");
-        println!("\tuncompressed size: {} bytes\t\t\t\t({} times smaller)", uncompressed_size, std_uncompressed_size / uncompressed_size);
-        println!("\tcompressed size: {} bytes\t\t\t\t({} times smaller)", compressed_size, std_compressed_size / compressed_size);
+        println!("\tuncompressed size: {} bytes\t\t\t({} times smaller)", uncompressed_size, std_uncompressed_size / uncompressed_size);
+        println!("\tcompressed size: {} bytes\t\t\t({} times smaller)", compressed_size, std_compressed_size / compressed_size);
         println!("\tprotobuf creation time: {}μs\t\t\t({} times faster)", (gen_time - before_gen_time).as_micros(), std_gen_time.as_micros() / (gen_time - before_gen_time).as_micros());
         println!("\tprotobuf serialization time: {}μs\t\t({} times faster)", (ser_time - before_ser_time).as_micros(), std_ser_time.as_micros() / (ser_time - before_ser_time).as_micros());
         println!("\tprotobuf deserialization time: {}μs\t\t({} times faster)", (deser_time - before_deser_time).as_micros(), std_deser_time.as_micros() / (deser_time - before_deser_time).as_micros());
