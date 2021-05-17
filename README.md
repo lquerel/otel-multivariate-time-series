@@ -175,6 +175,6 @@ Columnar representation:
 These different encodings could be specified directly in the OTEL protobuf.   
 
 ## Steps to reproduce this benchmark
-- Install Rust: ```curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh```
+- Install the Rust tool chain: ```curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh```
 - Clone this repo
-- ```cargo run --release```
+- Run the test: ```cargo run --release```
