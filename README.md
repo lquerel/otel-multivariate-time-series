@@ -3,8 +3,9 @@
 ## Introduction
 The current OTEL protocol doesn't natively support multivariate time-series. 
 This repository adds the support for multivariate time-series at the protocol level in a backward compatible manner. 
+An [OTEP document](https://github.com/lquerel/oteps/blob/main/text/metrics/0000-multivariate-timeseries.md) is visible for more details on why multivariate time-series are important. 
 
-Status: This is a work-in-progress work and is NOT an official implementation of the OpenTelemetry protocol. Histogram and summary are not yet supported.
+Status: This IS a work-in-progress work and IS NOT an official implementation of the OpenTelemetry protocol. Histogram and summary are not yet supported.
 
 ## Dataset
 * 10000 data points represented in JSON (size uncompressed 6009735 bytes).

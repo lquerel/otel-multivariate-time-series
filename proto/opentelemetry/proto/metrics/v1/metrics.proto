@@ -56,6 +56,19 @@ message InstrumentationLibraryMetrics {
   string schema_url = 3;
 }
 
+// Defines a multivariate time-series composed of:
+// - zero to n attributes (or categorical dimensions).
+// - one time_unix_nano_column
+// - zero or one start_time_unix_nano_column
+// - one or n metric columns
+//
+// Invariants:
+// - The number of values for each attribute, time_unix_nano_column, and metrics must be strictly equal.
+// start_time_unix_nano_column can be either empty of equal to the number of rows of the other columns previously
+// mentioned.
+// - The values in each column must be aligned with the timestamps defined in the time_unix_nano_column.
+//
+// Note: Empty values could be supported by adding a bitset per column.
 message MultivariateMetric {
   repeated ColumnarAttribute attributes = 1;
 
@@ -66,8 +79,11 @@ message MultivariateMetric {
   repeated ColumnarMetric metrics = 4;
 }
 
+// Defines a set of values for a named attribute.
 message ColumnarAttribute {
+  // Name of this column attribute.
   string name = 1;
+  // List of values for this attributes.
   repeated string values = 2;
 }
 
@@ -96,19 +112,19 @@ message ColumnarSum {
   bool is_monotonic = 3;
 }
 
+message ColumnarNumberDataPoint {
+  oneof value {
+    DoubleValues as_doubles = 4;
+    IntValues as_ints = 6;
+  }
+}
+
 message DoubleValues {
   repeated double value = 1;
 }
 
 message IntValues {
   repeated sint64 value = 1;
-}
-
-message ColumnarNumberDataPoint {
-  oneof value {
-    DoubleValues as_doubles = 4;
-    IntValues as_ints = 6;
-  }
 }
 
 // Defines a Metric which has one or more timeseries.  The following is a
