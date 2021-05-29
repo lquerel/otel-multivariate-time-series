@@ -94,12 +94,14 @@ message Column {
   }
 }
 
+// Can be used to represent a dictionary, links, exemplars, histogram, ...
 message AuxiliaryEntity {
   enum LogicalType {
     HISTOGRAM = 0;
     QUANTILE = 1;
     EXEMPLAR = 2;
     TRACE_LINK = 3;
+    DICTIONARY = 4;
 
     OTHER = 1000;
   }
@@ -200,16 +202,25 @@ message BoolColumn {
 message BytesColumn {
   enum LogicalType {
     ATTRIBUTE = 0;      // An attribute participates in the uniqueness identification of an event
-    UUID = 1;
-    SPAN_ID = 2;
-    TRACE_ID = 3;
+    GAUGE = 1;
+    SUM = 2;
+    UUID = 3;
+    SPAN_ID = 4;
+    TRACE_ID = 5;
+  }
+
+  enum Encoding {
+    NONE = 0;
+    DELTA = 1;
+    DOUBLE_DELTA = 2;
   }
 
   string name = 1;
   LogicalType logical_type = 2;
   string description = 3;
-  repeated bytes values = 4;
-  bytes validity_bitmap = 5;
+  Encoding encoding = 4;
+  repeated bytes values = 5;
+  bytes validity_bitmap = 6;
 }
 
 
