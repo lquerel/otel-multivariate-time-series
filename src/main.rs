@@ -14,6 +14,7 @@ use plotters::prelude::*;
 mod multivariate_ts_gen;
 mod metrics_std;
 mod metrics_columnar;
+mod event;
 
 pub mod opentelemetry {
     pub mod proto {
@@ -32,6 +33,12 @@ pub mod opentelemetry {
         pub mod metrics {
             pub mod v1 {
                 include!(concat!(env!("OUT_DIR"), "/opentelemetry.proto.metrics.v1.rs"));
+            }
+        }
+
+        pub mod events {
+            pub mod v1 {
+                include!(concat!(env!("OUT_DIR"), "/opentelemetry.proto.events.v1.rs"));
             }
         }
     }
@@ -124,6 +131,41 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
     Ok(())
 }
+
+// ToDo
+// fn bench(representation: &str, gen_resource_metrics: Fn<>) {
+//     let before_gen_time = Instant::now();
+//     let resource_metrics = gen_standard_metrics(&time_series);
+//     let gen_time = Instant::now();
+//     let mut buf: Vec<u8> = Vec::new();
+//     let before_ser_time = Instant::now();
+//     resource_metrics.encode(&mut buf)?;
+//     let ser_time = Instant::now();
+//     let std_uncompressed_size = buf.len();
+//     let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
+//     e.write_all(&buf)?;
+//     let compressed_bytes = e.finish().unwrap();
+//     let std_compressed_size = compressed_bytes.len();
+//     let before_deser_time = Instant::now();
+//     let resource_metrics = ResourceMetrics::decode(Bytes::from(buf)).unwrap();
+//     assert_eq!("tbd".to_string(), resource_metrics.schema_url);
+//     let deser_time = Instant::now();
+//     let std_gen_time = gen_time - before_gen_time;
+//     let std_ser_time = ser_time - before_ser_time;
+//     let std_deser_time = deser_time - before_deser_time;
+//     std_uncompressed_size_vec.push(((i * 1000) as i64, std_uncompressed_size as i64));
+//     std_compressed_size_vec.push(((i * 1000) as i64, std_compressed_size as i64));
+//     std_creation_time_vec.push(((i * 1000) as i64, std_gen_time.as_micros()));
+//     std_ser_time_vec.push(((i * 1000) as i64, std_ser_time.as_micros()));
+//     std_deser_time_vec.push(((i * 1000) as i64, std_deser_time.as_micros()));
+//     println!("Standard representation:");
+//     println!("\tuncompressed size: {} bytes", std_uncompressed_size);
+//     println!("\tcompressed size: {} bytes", std_compressed_size);
+//     println!("\tprotobuf creation time: {}μs", std_gen_time.as_micros());
+//     println!("\tprotobuf serialization time: {}μs", std_ser_time.as_micros());
+//     println!("\tprotobuf deserialization time: {}μs", std_deser_time.as_micros());
+//     println!();
+// }
 
 pub fn build_charts(std_uncompressed_size_vec: &[(i64, i64)],
                     columnar_uncompressed_size_vec: &[(i64, i64)],
