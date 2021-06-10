@@ -1,48 +1,15 @@
 use std::error::Error;
-use crate::multivariate_ts_gen::MultivariateDataPoint;
-use crate::metrics_std::gen_standard_metrics;
+use otel_multivariate_time_series::multivariate_ts_gen::MultivariateDataPoint;
+use otel_multivariate_time_series::metrics_std::gen_standard_metrics;
 use prost::Message;
-use crate::metrics_columnar::gen_columnar_metrics;
+use otel_multivariate_time_series::metrics_columnar::gen_columnar_metrics;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use std::io::Write;
 use std::time::Instant;
-use crate::opentelemetry::proto::metrics::v1::ResourceMetrics;
+use otel_multivariate_time_series::opentelemetry::proto::metrics::v1::ResourceMetrics;
 use bytes::Bytes;
 use plotters::prelude::*;
-
-mod multivariate_ts_gen;
-mod metrics_std;
-mod metrics_columnar;
-mod event;
-
-pub mod opentelemetry {
-    pub mod proto {
-        pub mod common {
-            pub mod v1 {
-                include!(concat!(env!("OUT_DIR"), "/opentelemetry.proto.common.v1.rs"));
-            }
-        }
-
-        pub mod resource {
-            pub mod v1 {
-                include!(concat!(env!("OUT_DIR"), "/opentelemetry.proto.resource.v1.rs"));
-            }
-        }
-
-        pub mod metrics {
-            pub mod v1 {
-                include!(concat!(env!("OUT_DIR"), "/opentelemetry.proto.metrics.v1.rs"));
-            }
-        }
-
-        pub mod events {
-            pub mod v1 {
-                include!(concat!(env!("OUT_DIR"), "/opentelemetry.proto.events.v1.rs"));
-            }
-        }
-    }
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut std_uncompressed_size_vec = vec![];
