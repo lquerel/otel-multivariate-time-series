@@ -75,33 +75,31 @@ message BatchEvent {
   repeated fixed64 end_time_unix_nano_column = 4;
 
   // A collection of equal-length columns
-  repeated Column columns = 5;
+  repeated Int64Column i64_values = 5;
+  repeated DoubleColumn f64_values = 6;
+  repeated StringColumn string_values = 7;
+  repeated BoolColumn bool_values = 8;
+  repeated BytesColumn bytes_values = 9;
+  repeated Int64SummaryColumn i64_summary_values = 10;
+  repeated DoubleSummaryColumn f64_summary_values = 11;
+  // ToDo Histogram
 
   // A one to many relationship between an event and multiple typed entities such as exemplars, links, ...
-  repeated AuxiliaryEntity auxiliary_entities = 6;
-}
-
-message Column {
-  oneof type {
-    // ToDo Histogram and Summary
-    Int64Column i64_values = 1;
-    DoubleColumn f64_values = 2;
-    StringColumn string_values = 3;
-    BoolColumn bool_values = 4;
-    BytesColumn bytes_values = 5;
-    Int64SummaryColumn i64_summary_values = 6;
-    DoubleSummaryColumn f64_summary_values = 7;
-  }
+  repeated AuxiliaryEntity auxiliary_entities = 12;
 }
 
 // Can be used to represent a dictionary, links, exemplars, histogram, ...
 message AuxiliaryEntity {
   enum LogicalType {
-    HISTOGRAM = 0;
-    QUANTILE = 1;
-    EXEMPLAR = 2;
-    TRACE_LINK = 3;
-    DICTIONARY = 4;
+    ATTRIBUTE = 0;
+    TRACE_EVENT = 1;
+    TRACE_LINK = 2;
+
+// ToDo
+//    HISTOGRAM = 3;
+//    QUANTILE = 4;
+//    EXEMPLAR = 5;
+//    DICTIONARY = 6;
 
     OTHER = 1000;
   }
@@ -112,8 +110,15 @@ message AuxiliaryEntity {
   // optional, if not defined the auxiliary entity is attached to the entire event instead of a specific
   // column in the event.
   string parent_column = 4;
-  repeated int64 parent_ranks = 5;
-  repeated Column columns = 6;
+  repeated uint32 parent_ranks = 5;
+  repeated Int64Column i64_values = 6;
+  repeated DoubleColumn f64_values = 7;
+  repeated StringColumn string_values = 8;
+  repeated BoolColumn bool_values = 9;
+  repeated BytesColumn bytes_values = 10;
+  repeated Int64SummaryColumn i64_summary_values = 11;
+  repeated DoubleSummaryColumn f64_summary_values = 12;
+  // ToDo Histogram
 }
 
 message Int64Column {

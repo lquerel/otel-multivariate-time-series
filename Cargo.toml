@@ -15,7 +15,6 @@ chrono = {version="0.4", features = ["serde"]}
 flate2 = "1.0.20"
 bytes = "1.0.1"
 plotters = "0.3"
-valuable = {git = "https://github.com/tokio-rs/valuable", features = ["derive"] }
 thiserror = "1.0"
 erased-serde = "0.3"
 

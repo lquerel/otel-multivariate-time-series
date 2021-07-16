@@ -1,21 +1,24 @@
-use valuable::Valuable;
 use std::marker::PhantomData;
-use crate::opentelemetry::proto::events::v1::{ResourceEvents, InstrumentationLibraryEvents, BatchEvent, Column, column, StringColumn, Int64Column};
+use crate::opentelemetry::proto::events::v1::{StringColumn, Int64Column, DoubleColumn, BytesColumn, Int64SummaryColumn, DoubleSummaryColumn, BoolColumn, ResourceEvents, InstrumentationLibraryEvents, BatchEvent, AuxiliaryEntity};
 use crate::opentelemetry::proto::resource::v1::Resource;
 use crate::opentelemetry::proto::common::v1::InstrumentationLibrary;
+use serde_json::{Value, Number, Map};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct BatchPolicy {
-    max_size: usize,
-    max_delay: chrono::Duration,
+    pub max_size: u32,
+    pub max_delay: chrono::Duration,
 }
 
 #[derive(Debug)]
-pub struct MetricBatchHandler<T> {
+pub struct EventBatchHandler<T: OpenTelemetryEvent> {
+    // ToDo why do we need 3 schema urn (recursively)
     schema_url: String,
-    batch_policy: BatchPolicy,
+    // ToDo pub(crate) ?
+    pub batch_policy: BatchPolicy,
+    pub resource_events: ResourceEvents,
     phantom_data: PhantomData<T>,
-    resource_events: ResourceEvents,
 }
 
 #[derive(Debug)]
@@ -29,25 +32,184 @@ pub enum Error {
     IoError(#[from] std::io::Error),
 }
 
-#[derive(Debug)]
-pub struct HttpTransaction {
-    pub host: String,
-    pub port: u16,
-    pub path: String,
-    pub query: String,
-    pub method: String,
-    pub http_code: u16,
-    pub dns_latency_ms: u32,
-    pub tls_handshake_ms: u32,
-    pub content_transfer_ms: u32,
-    pub server_processing_ms: u32,
-    pub request_size_bytes: u64,
-    pub response_size_bytes: u64,
+pub trait OpenTelemetryEvent {
+    fn urn() -> String;
+    fn int64_columns(_batch_policy: &BatchPolicy) -> Vec<Int64Column> { Vec::with_capacity(0) }
+    fn double_columns(_batch_policy: &BatchPolicy) -> Vec<DoubleColumn> { Vec::with_capacity(0) }
+    fn string_columns(_batch_policy: &BatchPolicy) -> Vec<StringColumn> { Vec::with_capacity(0) }
+    fn bool_columns(_batch_policy: &BatchPolicy) -> Vec<BoolColumn> { Vec::with_capacity(0) }
+    fn bytes_columns(_batch_policy: &BatchPolicy) -> Vec<BytesColumn> { Vec::with_capacity(0) }
+    fn int64_summary_columns(_batch_policy: &BatchPolicy) -> Vec<Int64SummaryColumn> { Vec::with_capacity(0) }
+    fn double_summary_columns(_batch_policy: &BatchPolicy) -> Vec<DoubleSummaryColumn> { Vec::with_capacity(0) }
+    fn auxiliary_entities(batch_policy: &BatchPolicy) -> Vec<AuxiliaryEntity> where Self: Sized { Vec::with_capacity(0) }
+        fn record_into(self, handler: &mut EventBatchHandler<Self>) where Self: Sized;
+
+    fn new_int64_column(name: &str, batch_policy: &BatchPolicy) -> Int64Column {
+        Int64Column {
+            name: name.into(),
+            logical_type: 0,
+            description: "".to_string(),
+            unit: "".to_string(),
+            aggregation_temporality: 0,
+            is_monotonic: false,
+            values: Vec::with_capacity(batch_policy.max_size as usize),
+            validity_bitmap: vec![],
+        }
+    }
+
+    fn new_optional_int64_column(name: &str, batch_policy: &BatchPolicy) -> Int64Column {
+        Int64Column {
+            name: name.into(),
+            logical_type: 0,
+            description: "".to_string(),
+            unit: "".to_string(),
+            aggregation_temporality: 0,
+            is_monotonic: false,
+            values: Vec::with_capacity(batch_policy.max_size as usize),
+            validity_bitmap: validity_bitmap(batch_policy.max_size as usize),
+        }
+    }
+
+    fn new_double_column(name: &str, batch_policy: &BatchPolicy) -> DoubleColumn {
+        DoubleColumn {
+            name: name.into(),
+            logical_type: 0,
+            description: "".to_string(),
+            unit: "".to_string(),
+            aggregation_temporality: 0,
+            is_monotonic: false,
+            values: Vec::with_capacity(batch_policy.max_size as usize),
+            validity_bitmap: vec![],
+        }
+    }
+
+    fn new_string_column(name: &str, batch_policy: &BatchPolicy) -> StringColumn {
+        StringColumn {
+            name: name.into(),
+            logical_type: 0,
+            description: "".to_string(),
+            values: Vec::with_capacity(batch_policy.max_size as usize),
+            validity_bitmap: vec![],
+        }
+    }
+
+    fn new_optional_string_column(name: &str, batch_policy: &BatchPolicy) -> StringColumn {
+        StringColumn {
+            name: name.into(),
+            logical_type: 0,
+            description: "".to_string(),
+            values: Vec::with_capacity(batch_policy.max_size as usize),
+            validity_bitmap: validity_bitmap(batch_policy.max_size as usize),
+        }
+    }
 }
 
 impl BatchPolicy {
-    pub fn new(max_size: usize, max_delay: chrono::Duration) -> Self {
+    pub fn new(max_size: u32, max_delay: chrono::Duration) -> Self {
         BatchPolicy { max_size, max_delay }
+    }
+}
+
+impl<T> EventBatchHandler<T> where T: OpenTelemetryEvent {
+    pub fn to_json_value(&self) -> Value {
+        let mut values = vec![];
+
+        for instrumentation_library_event in &self.resource_events.instrumentation_library_events {
+            for batch_event in &instrumentation_library_event.batches {
+                let first_event_rank = values.len();
+
+                for i in 0..batch_event.size as usize {
+                    let mut json_object = serde_json::Map::new();
+
+                    json_object.insert("@schema_url".to_string(), Value::String(batch_event.schema_url.clone()));
+                    json_object.insert("@start_time_unix_nano".to_string(), Value::Number(Number::from(batch_event.start_time_unix_nano_column[i])));
+                    json_object.insert("@end_time_unix_nano".to_string(), Value::Number(Number::from(batch_event.end_time_unix_nano_column[i])));
+
+                    Self::insert_i64_values(&mut json_object, &batch_event.i64_values, i);
+                    Self::insert_f64_values(&mut json_object, &batch_event.f64_values, i);
+                    Self::insert_string_values(&mut json_object, &batch_event.string_values, i);
+                    Self::insert_bool_values(&mut json_object, &batch_event.bool_values, i);
+
+                    values.push(Value::Object(json_object));
+                }
+
+                if !batch_event.auxiliary_entities.is_empty() {
+                    for auxiliary_entity in &batch_event.auxiliary_entities {
+                        let mut auxiliary_values = vec![];
+                        let mut parent_rank: usize = 0;
+
+                        for j in 0..auxiliary_entity.size as usize {
+                            if parent_rank == auxiliary_entity.parent_ranks[j] as usize {
+                                let mut json_object = serde_json::Map::new();
+
+                                Self::insert_i64_values(&mut json_object, &auxiliary_entity.i64_values, j);
+                                Self::insert_f64_values(&mut json_object, &auxiliary_entity.f64_values, j);
+                                Self::insert_string_values(&mut json_object, &auxiliary_entity.string_values, j);
+                                Self::insert_bool_values(&mut json_object, &auxiliary_entity.bool_values, j);
+
+                                auxiliary_values.push(Value::Object(json_object));
+                            } else {
+                                if let Some(json_object) = values[first_event_rank+parent_rank].as_object_mut() {
+                                    json_object.insert(auxiliary_entity.parent_column.clone(), Value::Array(auxiliary_values));
+                                }
+                                auxiliary_values = vec![];
+                                parent_rank = auxiliary_entity.parent_ranks[j] as usize;
+                                let mut json_object = serde_json::Map::new();
+
+                                Self::insert_i64_values(&mut json_object, &auxiliary_entity.i64_values, j);
+                                Self::insert_f64_values(&mut json_object, &auxiliary_entity.f64_values, j);
+                                Self::insert_string_values(&mut json_object, &auxiliary_entity.string_values, j);
+                                Self::insert_bool_values(&mut json_object, &auxiliary_entity.bool_values, j);
+
+                                auxiliary_values.push(Value::Object(json_object));
+                            }
+                        }
+                        if !auxiliary_values.is_empty() {
+                            if let Some(json_object) = values[first_event_rank+parent_rank].as_object_mut() {
+                                json_object.insert(auxiliary_entity.parent_column.clone(), Value::Array(auxiliary_values));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Value::Array(values)
+    }
+
+    fn insert_i64_values(json_object: &mut Map<String,Value>, i64_values: &[Int64Column], rank: usize) {
+        for column in i64_values {
+            if column.validity_bitmap.is_empty() || is_valid_value(&column.validity_bitmap, rank) {
+                json_object.insert(column.name.clone(), Value::Number(Number::from(column.values[rank])));
+            }
+        }
+    }
+
+    fn insert_f64_values(json_object: &mut Map<String,Value>, f64_values: &[DoubleColumn], rank: usize) {
+        for column in f64_values {
+            if column.validity_bitmap.is_empty() || is_valid_value(&column.validity_bitmap, rank) {
+                let number = Number::from_f64(column.values[rank]);
+                if let Some(number) = number {
+                    json_object.insert(column.name.clone(), Value::Number(number));
+                }
+            }
+        }
+    }
+
+    fn insert_string_values(json_object: &mut Map<String,Value>, string_values: &[StringColumn], rank: usize) {
+        for column in string_values {
+            if column.validity_bitmap.is_empty() || is_valid_value(&column.validity_bitmap, rank) {
+                json_object.insert(column.name.clone(), Value::String(column.values[rank].clone()));
+            }
+        }
+    }
+
+    fn insert_bool_values(json_object: &mut Map<String,Value>, bool_values: &[BoolColumn], rank: usize) {
+        for column in bool_values {
+            if column.validity_bitmap.is_empty() || is_valid_value(&column.validity_bitmap, rank) {
+                json_object.insert(column.name.clone(), Value::Bool(column.values[rank]));
+            }
+        }
     }
 }
 
@@ -58,98 +220,114 @@ impl EventCollector {
         }
     }
 
-    pub fn metric_handler(&self, schema_url: &str) -> MetricBatchHandler<HttpTransaction> {
-        MetricBatchHandler {
-            schema_url: schema_url.into(),
+    pub fn event_handler<T: OpenTelemetryEvent>(&self) -> EventBatchHandler<T> {
+        EventBatchHandler {
+            schema_url: T::urn(),
             batch_policy: self.default_batch_policy.clone(),
             phantom_data: PhantomData::default(),
             resource_events: ResourceEvents {
                 resource: Some(Resource {
                     attributes: vec![],
-                    dropped_attributes_count: 0
+                    dropped_attributes_count: 0,
                 }),
                 instrumentation_library_events: vec![
                     InstrumentationLibraryEvents {
-                        instrumentation_library: Some(InstrumentationLibrary { name: "rust-std".into(), version: "1.0".into() }),
+                        instrumentation_library: Some(InstrumentationLibrary { name: "otel-rust".into(), version: "1.0".into() }),
                         batches: vec![
                             BatchEvent {
-                                schema_url: schema_url.into(),
+                                schema_url: T::urn(),
                                 size: 0,
-                                start_time_unix_nano_column: vec![],
-                                end_time_unix_nano_column: vec![],
-                                columns: vec![
-                                    Column { r#type: Some(column::Type::StringValues(StringColumn {
-                                        name: "host".to_string(),
-                                        logical_type: 0,
-                                        description: "".to_string(),
-                                        values: vec![],
-                                        validity_bitmap: vec![]
-                                    }))
-                                    },
-                                    Column { r#type: Some(column::Type::I64Values(Int64Column {
-                                        name: "port".to_string(),
-                                        logical_type: 0,
-                                        description: "".to_string(),
-                                        unit: "".to_string(),
-                                        aggregation_temporality: 0,
-                                        is_monotonic: false,
-                                        values: vec![],
-                                        validity_bitmap: vec![]
-                                    }))
-                                    },
-                                    Column { r#type: Some(column::Type::StringValues(StringColumn {
-                                        name: "path".to_string(),
-                                        logical_type: 0,
-                                        description: "".to_string(),
-                                        values: vec![],
-                                        validity_bitmap: vec![]
-                                    }))
-                                    },
-                                    Column { r#type: Some(column::Type::StringValues(StringColumn {
-                                        name: "query".to_string(),
-                                        logical_type: 0,
-                                        description: "".to_string(),
-                                        values: vec![],
-                                        validity_bitmap: vec![]
-                                    }))
-                                    },
-                                    Column { r#type: Some(column::Type::StringValues(StringColumn {
-                                        name: "method".to_string(),
-                                        logical_type: 0,
-                                        description: "".to_string(),
-                                        values: vec![],
-                                        validity_bitmap: vec![]
-                                    }))
-                                    },
-                                    Column { r#type: Some(column::Type::I64Values(Int64Column {
-                                        name: "http_code".to_string(),
-                                        logical_type: 0,
-                                        description: "".to_string(),
-                                        unit: "".to_string(),
-                                        aggregation_temporality: 0,
-                                        is_monotonic: false,
-                                        values: vec![],
-                                        validity_bitmap: vec![]
-                                    }))
-                                    },
-                                ],
-                                auxiliary_entities: vec![]
+                                start_time_unix_nano_column: Vec::with_capacity(self.default_batch_policy.max_size as usize),
+                                end_time_unix_nano_column: Vec::with_capacity(self.default_batch_policy.max_size as usize),
+                                i64_values: T::int64_columns(&self.default_batch_policy),
+                                f64_values: T::double_columns(&self.default_batch_policy),
+                                string_values: T::string_columns(&self.default_batch_policy),
+                                bool_values: T::bool_columns(&self.default_batch_policy),
+                                bytes_values: T::bytes_columns(&self.default_batch_policy),
+                                i64_summary_values: T::int64_summary_columns(&self.default_batch_policy),
+                                f64_summary_values: T::double_summary_columns(&self.default_batch_policy),
+                                auxiliary_entities: T::auxiliary_entities(&self.default_batch_policy),
                             }
                         ],
-                        dropped_events_count: 0
+                        dropped_events_count: 0,
                     }
                 ],
-                schema_url: schema_url.into(),
-            }
+                schema_url: "".into(),
+            },
         }
     }
 }
 
-impl MetricBatchHandler<HttpTransaction> {
-    pub fn record(&mut self, event: HttpTransaction) -> Result<(), Error> {
-        println!("{:?}",event);
+impl<T: OpenTelemetryEvent> EventBatchHandler<T> {
+    pub fn record(&mut self, event: T) -> Result<(), Error> {
+        event.record_into(self);
         Ok(())
     }
 }
 
+/// Note: This invariant nth_bit/8 < bytes.len() is enforced by design (code generated by the macro).
+#[inline(always)]
+pub fn set_nth_bit(validity_bitmap: &mut Vec<u8>, nth_bit: usize) {
+    validity_bitmap[nth_bit / 8] |= 1 << (nth_bit % 8);
+}
 
+#[inline(always)]
+pub fn is_valid_value(validity_bitmap: &Vec<u8>, nth_bit: usize) -> bool {
+    validity_bitmap[nth_bit / 8] & (1 << (nth_bit % 8)) > 0
+}
+
+#[inline(always)]
+pub fn validity_bitmap(size: usize) -> Vec<u8> {
+    vec![0; size]
+}
+
+#[inline(always)]
+pub fn reset_validity_bitmap(validity_bitmap: &mut Vec<u8>) {
+    for byte in validity_bitmap {
+        *byte = 0;
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::event::{set_nth_bit, validity_bitmap, reset_validity_bitmap};
+
+    #[test]
+    fn test() {
+        let size = (100 + (8 - 1))/8;
+        let mut validity_bitmap: Vec<u8> = validity_bitmap(size);
+
+        set_nth_bit(&mut validity_bitmap, 0);
+        set_nth_bit(&mut validity_bitmap, 2);
+        set_nth_bit(&mut validity_bitmap, 10);
+
+        assert_eq!(&format!("{:08b}", validity_bitmap[0]), "00000101");
+        assert_eq!(&format!("{:08b}", validity_bitmap[1]), "00000100");
+        assert_eq!(&format!("{:08b}", validity_bitmap[2]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[3]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[4]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[5]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[6]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[7]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[8]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[9]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[10]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[11]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[12]), "00000000");
+
+        reset_validity_bitmap(&mut validity_bitmap);
+        assert_eq!(&format!("{:08b}", validity_bitmap[0]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[1]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[2]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[3]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[4]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[5]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[6]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[7]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[8]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[9]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[10]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[11]), "00000000");
+        assert_eq!(&format!("{:08b}", validity_bitmap[12]), "00000000");
+    }
+}
