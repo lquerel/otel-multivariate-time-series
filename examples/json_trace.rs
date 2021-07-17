@@ -1,17 +1,18 @@
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use serde::Deserialize;
-use otel_multivariate_time_series::event::{OpenTelemetryEvent, BatchPolicy, EventBatchHandler, reset_validity_bitmap, set_nth_bit};
+use otel_multivariate_time_series::event::{BatchPolicy, ArrowEventBatchHandler, reset_validity_bitmap, set_nth_bit, OpenTelemetryArrowEvent, OpenTelemetryEvent, EventBatchHandler};
+use prost::Message;
+use arrow::datatypes::{Schema, Field, DataType};
 use otel_multivariate_time_series::opentelemetry::proto::events::v1::{Int64Column, StringColumn, AuxiliaryEntity};
 use otel_multivariate_time_series::opentelemetry::proto::events::v1::auxiliary_entity::LogicalType;
-use prost::Message;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct JsonTrace {
     pub evt: Evt,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Evt {
     pub trace_id: String,
     pub span_id: String,
@@ -25,7 +26,7 @@ pub struct Evt {
     pub attributes: Option<HashMap<String,Option<String>>>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Status {
     pub message: Option<String>,
     pub code: Option<i64>
@@ -215,3 +216,68 @@ impl OpenTelemetryEvent for JsonTrace {
         }
     }
 }
+
+impl OpenTelemetryArrowEvent for JsonTrace {
+    fn urn() -> String {
+        "urn:project_a:trace:service".into()
+    }
+
+    fn record_into(self, handler: &mut ArrowEventBatchHandler<Self>) where Self: Sized {
+    }
+
+    fn arrow_schema(_batch_policy: &BatchPolicy) -> Schema {
+        Schema::new(vec![
+            Field::new("kind", DataType::Int64, true),
+            Field::new(
+                "status",
+                DataType::Struct(vec![
+                    Field::new("message", DataType::Utf8, true),
+                    Field::new("code", DataType::Int64, true),
+                ]),
+                true,
+            ),
+            Field::new("trace_id", DataType::Utf8, false),
+            Field::new("span_id", DataType::Utf8, false),
+            Field::new("trace_state", DataType::Utf8, true),
+            Field::new("parent_span_id", DataType::Utf8, true),
+            Field::new("name", DataType::Utf8, false),
+            Field::new("attributes", DataType::List(
+                Box::new(Field::new(
+                    "attr",
+                    DataType::Struct(vec![
+                        Field::new("name", DataType::Utf8, false),
+                        Field::new("value", DataType::Utf8, false),
+                    ]),
+                    true,
+                ))
+            ), true),
+        ])
+    }
+}
+
+/*
+        let struct_type = DataType::Struct(vec![
+            Field::new("name", DataType::Utf8, false),
+            Field::new("value", DataType::Utf8, false),
+        ]);
+        let value_data = ArrayData::builder(struct_type.clone())
+            .len(8)
+            .add_buffer(Buffer::from())
+            .build();
+        let value_offsets = Buffer::from(&[0, 3, 6, 8].to_byte_slice());
+
+        let list_data = ArrayData::builder(DataType::List(Box::new(Field::new(
+            "attr",
+            DataType::Struct(vec![
+                Field::new("name", DataType::Utf8, false),
+                Field::new("value", DataType::Utf8, false),
+            ]),
+            true,
+        )))
+            .len(10)
+            .add_buffer(value_offsets)
+            .add_child_data(value_data)
+            .build();
+
+        let list_array = ListArray::from(list_data);
+ */

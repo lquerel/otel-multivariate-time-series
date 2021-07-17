@@ -4,6 +4,7 @@ pub mod metrics_columnar;
 pub mod event;
 pub mod serializer;
 pub mod error;
+pub mod native_trace;
 
 pub mod opentelemetry {
     pub mod proto {
@@ -25,9 +26,21 @@ pub mod opentelemetry {
             }
         }
 
+        pub mod trace {
+            pub mod v1 {
+                include!(concat!(env!("OUT_DIR"), "/opentelemetry.proto.trace.v1.rs"));
+            }
+        }
+
         pub mod events {
             pub mod v1 {
                 include!(concat!(env!("OUT_DIR"), "/opentelemetry.proto.events.v1.rs"));
+            }
+        }
+
+        pub mod arrow_events {
+            pub mod v1 {
+                include!(concat!(env!("OUT_DIR"), "/opentelemetry.proto.arrow_events.v1.rs"));
             }
         }
     }

@@ -3,7 +3,8 @@ use crate::opentelemetry::proto::events::v1::{StringColumn, Int64Column, DoubleC
 use crate::opentelemetry::proto::resource::v1::Resource;
 use crate::opentelemetry::proto::common::v1::InstrumentationLibrary;
 use serde_json::{Value, Number, Map};
-use std::collections::HashMap;
+use arrow::datatypes::Schema;
+use crate::opentelemetry::proto::arrow_events::v1 as arrow_events;
 
 #[derive(Debug, Clone)]
 pub struct BatchPolicy {
@@ -18,6 +19,17 @@ pub struct EventBatchHandler<T: OpenTelemetryEvent> {
     // ToDo pub(crate) ?
     pub batch_policy: BatchPolicy,
     pub resource_events: ResourceEvents,
+    phantom_data: PhantomData<T>,
+}
+
+#[derive(Debug)]
+pub struct ArrowEventBatchHandler<T: OpenTelemetryArrowEvent> {
+    // ToDo why do we need 3 schema urn (recursively)
+    schema_url: String,
+    // ToDo pub(crate) ?
+    pub batch_policy: BatchPolicy,
+    pub resource_events: arrow_events::ResourceEvents,
+    pub arrow_schema: Schema,
     phantom_data: PhantomData<T>,
 }
 
@@ -41,8 +53,8 @@ pub trait OpenTelemetryEvent {
     fn bytes_columns(_batch_policy: &BatchPolicy) -> Vec<BytesColumn> { Vec::with_capacity(0) }
     fn int64_summary_columns(_batch_policy: &BatchPolicy) -> Vec<Int64SummaryColumn> { Vec::with_capacity(0) }
     fn double_summary_columns(_batch_policy: &BatchPolicy) -> Vec<DoubleSummaryColumn> { Vec::with_capacity(0) }
-    fn auxiliary_entities(batch_policy: &BatchPolicy) -> Vec<AuxiliaryEntity> where Self: Sized { Vec::with_capacity(0) }
-        fn record_into(self, handler: &mut EventBatchHandler<Self>) where Self: Sized;
+    fn auxiliary_entities(_batch_policy: &BatchPolicy) -> Vec<AuxiliaryEntity> where Self: Sized { Vec::with_capacity(0) }
+    fn record_into(self, handler: &mut EventBatchHandler<Self>) where Self: Sized;
 
     fn new_int64_column(name: &str, batch_policy: &BatchPolicy) -> Int64Column {
         Int64Column {
@@ -102,6 +114,12 @@ pub trait OpenTelemetryEvent {
             validity_bitmap: validity_bitmap(batch_policy.max_size as usize),
         }
     }
+}
+
+pub trait OpenTelemetryArrowEvent {
+    fn urn() -> String;
+    fn arrow_schema(_batch_policy: &BatchPolicy) -> Schema;
+    fn record_into(self, handler: &mut ArrowEventBatchHandler<Self>) where Self: Sized;
 }
 
 impl BatchPolicy {
@@ -256,9 +274,47 @@ impl EventCollector {
             },
         }
     }
+
+    pub fn arrow_event_handler<T: OpenTelemetryArrowEvent>(&self) -> ArrowEventBatchHandler<T> {
+        ArrowEventBatchHandler {
+            schema_url: T::urn(),
+            batch_policy: self.default_batch_policy.clone(),
+            phantom_data: PhantomData::default(),
+            resource_events: arrow_events::ResourceEvents {
+                resource: Some(Resource {
+                    attributes: vec![],
+                    dropped_attributes_count: 0,
+                }),
+                instrumentation_library_events: vec![
+                    arrow_events::InstrumentationLibraryEvents {
+                        instrumentation_library: Some(InstrumentationLibrary { name: "otel-rust".into(), version: "1.0".into() }),
+                        batches: vec![
+                            arrow_events::BatchEvent {
+                                schema_url: T::urn(),
+                                size: 0,
+                                start_time_unix_nano_column: Vec::with_capacity(self.default_batch_policy.max_size as usize),
+                                end_time_unix_nano_column: Vec::with_capacity(self.default_batch_policy.max_size as usize),
+                                arrow_buffer: vec![],
+                            }
+                        ],
+                        dropped_events_count: 0,
+                    }
+                ],
+                schema_url: "".into(),
+            },
+            arrow_schema: T::arrow_schema(&self.default_batch_policy),
+        }
+    }
 }
 
 impl<T: OpenTelemetryEvent> EventBatchHandler<T> {
+    pub fn record(&mut self, event: T) -> Result<(), Error> {
+        event.record_into(self);
+        Ok(())
+    }
+}
+
+impl<T: OpenTelemetryArrowEvent> ArrowEventBatchHandler<T> {
     pub fn record(&mut self, event: T) -> Result<(), Error> {
         event.record_into(self);
         Ok(())

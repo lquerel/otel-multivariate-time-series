@@ -1,10 +1,10 @@
 use chrono::Utc;
 
-use trace_with_schema::{Trace, StatusCode, SpanKind, Event, Link, TraceAttributes, EventAttributes, LinkAttributes, Status};
+use specialized_attr_trace::{Trace, StatusCode, SpanKind, Event, Link, TraceAttributes, EventAttributes, LinkAttributes, Status};
 use otel_multivariate_time_series::event::{BatchPolicy, Error, EventCollector, EventBatchHandler, OpenTelemetryEvent};
 use otel_multivariate_time_series::opentelemetry::proto::events::v1::{Int64Column, StringColumn};
 
-mod trace_with_schema;
+mod specialized_attr_trace;
 
 /*
 

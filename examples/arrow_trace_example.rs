@@ -4,11 +4,12 @@ use std::path::PathBuf;
 use std::io::BufReader;
 use std::fs::File;
 
-mod trace_without_schema;
+mod json_trace;
 
-use crate::trace_without_schema::JsonTrace;
+use crate::json_trace::JsonTrace;
 
 // ToDo Numerical and boolean attributes could be better represented as numerical or boolean columns
+// ToDo Multi nested level (e.g. attributes in events and links)
 
 fn main() -> Result<(), Error> {
     let event_collector = EventCollector::new(BatchPolicy::new(100, chrono::Duration::seconds(10)));
