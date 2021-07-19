@@ -74,6 +74,10 @@ pub fn json_trace_to_span(json_trace: JsonTrace) -> Span {
 }
 
 impl ProfilableProtocol for Test {
+    fn name(&self) -> String {
+        "otel_trace_v1".into()
+    }
+
     fn dataset_size(&self) -> usize {
         self.dataset.traces.len()
     }
