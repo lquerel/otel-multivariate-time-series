@@ -298,8 +298,6 @@ impl EventCollector {
                             arrow_events::BatchEvent {
                                 schema_url: T::urn(),
                                 size: 0,
-                                start_time_unix_nano_column: Vec::with_capacity(self.default_batch_policy.max_size as usize),
-                                end_time_unix_nano_column: Vec::with_capacity(self.default_batch_policy.max_size as usize),
                                 arrow_buffer: vec![],
                             }
                         ],

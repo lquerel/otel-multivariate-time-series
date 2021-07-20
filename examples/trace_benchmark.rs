@@ -21,6 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     generic_attr_trace_example::profile(&mut profiler, &dataset,max_iter);
 
     profiler.print_results();
+    profiler.to_csv("trace");
 
     Ok(())
 }

@@ -85,7 +85,7 @@ pub fn gen_columnar_metrics(time_series: &[MultivariateDataPoint]) -> ResourceEv
                 batches: vec![
                     BatchEvent {
                         schema_url: "tbd".into(),
-                        size: 0,
+                        size: time_series.len() as u32,
                         start_time_unix_nano_column: time_series.iter().map(|p| p.ts.timestamp_nanos() as u64).collect(),
                         end_time_unix_nano_column: time_series.iter().map(|p| p.ts.timestamp_nanos() as u64).collect(),
                         i64_values: vec![

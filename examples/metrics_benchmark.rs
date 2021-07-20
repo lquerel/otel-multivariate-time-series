@@ -3,7 +3,8 @@ use std::error::Error;
 pub mod profiler;
 pub mod dataset;
 pub mod otel_v1;
-pub mod otel_event;
+pub mod otel_columnar;
+pub mod otel_arrow;
 
 use crate::profiler::Profiler;
 use crate::dataset::Dataset;
@@ -16,9 +17,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let max_iter = 2;
 
     otel_v1::metrics::profile(&mut profiler, &dataset,max_iter)?;
-    otel_event::metrics::profile(&mut profiler, &dataset,max_iter)?;
+    otel_columnar::metrics::profile(&mut profiler, &dataset, max_iter)?;
+    otel_arrow::metrics::profile(&mut profiler, &dataset, max_iter)?;
 
     profiler.print_results();
+    profiler.to_csv("metrics")?;
 
     Ok(())
 }

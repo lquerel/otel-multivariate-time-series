@@ -2,12 +2,13 @@ use std::time::{Instant};
 use prost::EncodeError;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
-use std::io::Write;
+use std::io::{Write, LineWriter};
 use std::error::Error;
 use std::collections::HashMap;
 use comfy_table::{Table, Cell, Color, Attribute, ContentArrangement};
 use std::fmt::{Display, Formatter};
 use comfy_table::presets::UTF8_FULL;
+use std::fs::File;
 
 // #[cfg(not(target_env = "msvc"))]
 // use jemallocator::Jemalloc;
@@ -21,7 +22,7 @@ pub trait ProfilableProtocol {
     fn init_batch_size(&mut self, batch_size: usize);
     fn dataset_size(&self) -> usize;
     fn create_batch(&mut self, start_at: usize, size: usize);
-    fn process(&self)  -> String {"".into()}
+    fn process(&self) -> String { "".into() }
     fn serialize(&self) -> Result<Vec<u8>, EncodeError>;
     fn deserialize(&mut self, buffer: Vec<u8>);
     fn clear(&mut self);
@@ -65,6 +66,7 @@ struct Summary {
     pub p90: f64,
     pub p95: f64,
     pub p99: f64,
+    pub values: Vec<f64>,
 }
 
 impl Display for Summary {
@@ -108,6 +110,7 @@ impl Metric {
             p90: self.percentile(90f64),
             p95: self.percentile(95f64),
             p99: self.percentile(99f64),
+            values: self.values.clone(),
         }
     }
 
@@ -162,9 +165,7 @@ impl Profiler {
     }
 
     pub fn profile(&mut self, otel_impl: &mut impl ProfilableProtocol, max_iter: usize) -> Result<(), Box<dyn Error>> {
-        self.benchmarks.push(ProfilerResult {bench_name: otel_impl.name(), summaries: vec![] });
-
-        let mut process_sum = 0;
+        self.benchmarks.push(ProfilerResult { bench_name: otel_impl.name(), summaries: vec![] });
 
         for batch_size in self.batch_sizes.iter() {
             println!("Profiling '{}' (batch-size={})", otel_impl.name(), *batch_size);
@@ -177,6 +178,8 @@ impl Profiler {
             let mut deserialization = Metric::new();
 
             otel_impl.init_batch_size(*batch_size);
+
+            let mut process_sum = 0;
 
             for _ in 0..max_iter {
                 let max_batch_count = otel_impl.dataset_size() / *batch_size;
@@ -221,26 +224,28 @@ impl Profiler {
                 otel_impl.clear();
             }
 
+            Self::consume(process_sum);
+
             self.benchmarks
                 .last_mut()
                 .expect("Profiling result not found")
                 .summaries
                 .push(BatchSummary {
-                batch_size: *batch_size,
-                uncompressed_size_byte: uncompressed_size.compute_summary(),
-                compressed_size_byte: compressed_size.compute_summary(),
-                batch_creation_sec: batch_creation.compute_summary(),
-                processing_sec: processing.compute_summary(),
-                serialization_sec: serialization.compute_summary(),
-                deserialization_sec: deserialization.compute_summary(),
-            });
+                    batch_size: *batch_size,
+                    uncompressed_size_byte: uncompressed_size.compute_summary(),
+                    compressed_size_byte: compressed_size.compute_summary(),
+                    batch_creation_sec: batch_creation.compute_summary(),
+                    processing_sec: processing.compute_summary(),
+                    serialization_sec: serialization.compute_summary(),
+                    deserialization_sec: deserialization.compute_summary(),
+                });
         }
         Ok(())
     }
 
     pub fn print_results(&self) {
         let mut headers = vec!["Steps".to_string()];
-        self.benchmarks.iter().for_each(|r| headers.push(format!("{} (p99)",r.bench_name)));
+        self.benchmarks.iter().for_each(|r| headers.push(format!("{} (p99)", r.bench_name)));
 
         let mut table = Table::new();
         table
@@ -267,17 +272,17 @@ impl Profiler {
             }
         }
 
-        self.add_section("Batch creation (s)", "batch_creation_sec", &mut table, &mut values);
-        self.add_section("Batch processing (s)", "processing_sec", &mut table, &mut values);
-        self.add_section("Uncompressed size (bytes)", "uncompressed_size_byte", &mut table, &mut values);
-        self.add_section("Compressed size (bytes)", "compressed_size_byte", &mut table, &mut values);
-        self.add_section("Serialization (s)", "serialization_sec", &mut table, &mut values);
-        self.add_section("Deserialisation (s)", "deserialization_sec", &mut table, &mut values);
+        self.add_section("Batch creation (ms)", "batch_creation_sec", &mut table, &mut values,|value| value * 1000.0);
+        self.add_section("Batch processing (ms)", "processing_sec", &mut table, &mut values,|value| value * 1000.0);
+        self.add_section("Serialization (ms)", "serialization_sec", &mut table, &mut values,|value| value * 1000.0);
+        self.add_section("Compressed size (bytes)", "compressed_size_byte", &mut table, &mut values, |value| value);
+        self.add_section("Uncompressed size (bytes)", "uncompressed_size_byte", &mut table, &mut values,|value| value);
+        self.add_section("Deserialisation (ms)", "deserialization_sec", &mut table, &mut values,|value| value * 1000.0);
 
         println!("{}", table);
     }
 
-    fn add_section(&self, label: &str, step: &str, table: &mut Table, values: &mut HashMap<String,Summary>) {
+    fn add_section(&self, label: &str, step: &str, table: &mut Table, values: &mut HashMap<String, Summary>,transform: fn(f64) -> f64) {
         table.add_row(vec![
             Cell::new(label).fg(Color::Green).add_attribute(Attribute::Bold),
             Cell::new(""),
@@ -293,12 +298,12 @@ impl Profiler {
 
                 if let Some(ref_impl_name) = &ref_impl_name {
                     let ref_key = format!("{}:{}:{}", ref_impl_name, *batch_size, step);
-                    improvement = format!(" (x{:.2})", values[&ref_key].p99/values[&key].p99);
+                    improvement = format!(" (x{:.2})", values[&ref_key].p99 / values[&key].p99);
                 } else {
                     ref_impl_name = Some(result.bench_name.clone());
                 }
 
-                let value = values[&key].p99;
+                let value = transform(values[&key].p99);
                 if value >= 1.0 {
                     row.push(format!("{:.5}{}", value, improvement));
                 } else {
@@ -308,4 +313,72 @@ impl Profiler {
             table.add_row(row);
         }
     }
+
+    pub fn to_csv(&self, file_prefix: &str) -> Result<(), Box<dyn Error>> {
+        self.write_csv_values(
+            &mut LineWriter::new(File::create(format!("{}_batch_creation_ms.csv", file_prefix))?),
+            |summary| &summary.batch_creation_sec,
+            |value| value * 1000.0,
+        )?;
+        self.write_csv_values(
+            &mut LineWriter::new(File::create(format!("{}_processing_ms.csv", file_prefix))?),
+            |summary| &summary.processing_sec,
+            |value| value * 1000.0,
+        )?;
+        self.write_csv_values(
+            &mut LineWriter::new(File::create(format!("{}_serialization_ms.csv", file_prefix))?),
+            |summary| &summary.serialization_sec,
+            |value| value * 1000.0,
+        )?;
+        self.write_csv_values(
+            &mut LineWriter::new(File::create(format!("{}_compressed_size_byte.csv", file_prefix))?),
+            |summary| &summary.compressed_size_byte,
+            |value| value,
+        )?;
+        self.write_csv_values(
+            &mut LineWriter::new(File::create(format!("{}_uncompressed_size_byte.csv", file_prefix))?),
+            |summary| &summary.uncompressed_size_byte,
+            |value| value,
+        )?;
+        self.write_csv_values(
+            &mut LineWriter::new(File::create(format!("{}_deserialization_ms.csv", file_prefix))?),
+            |summary| &summary.deserialization_sec,
+            |value| value * 1000.0,
+        )?;
+
+        Ok(())
+    }
+
+    fn write_csv_values(&self, file: &mut LineWriter<File>,
+                        summary_sel: fn(&BatchSummary) -> &Summary,
+                        transform: fn(f64) -> f64) -> Result<(), Box<dyn Error>> {
+        file.write_all(b"batch_size,iteration")?;
+        for result in self.benchmarks.iter() {
+            file.write_all(format!(",{}", result.bench_name).as_bytes())?;
+        }
+        file.write_all(b"\n")?;
+
+        // processing_sec values
+        for (batch_idx, batch_size) in self.batch_sizes.iter().enumerate() {
+            if self.benchmarks.is_empty() {
+                continue;
+            }
+
+            let num_samples = summary_sel(&self.benchmarks[0].summaries[batch_idx]).values.len();
+            for sample_idx in 0..num_samples {
+                let mut line = format!("{},{}", batch_size, sample_idx);
+                for result in self.benchmarks.iter() {
+                    line.push_str(&format!(",{}", transform(summary_sel(&result.summaries[batch_idx]).values[sample_idx])));
+                }
+                line.push_str("\n");
+                file.write_all(line.as_bytes())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn consume(_value: usize) {}
+
+    // ToDo build charts with plotly.rs
 }

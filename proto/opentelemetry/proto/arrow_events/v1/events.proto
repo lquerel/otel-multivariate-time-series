@@ -62,10 +62,6 @@ message BatchEvent {
 
   uint32 size = 2;
 
-  repeated fixed64 start_time_unix_nano_column = 3;
-
-  repeated fixed64 end_time_unix_nano_column = 4;
-
   bytes  arrow_buffer = 5;
 }
 
