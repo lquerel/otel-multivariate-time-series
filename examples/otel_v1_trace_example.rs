@@ -8,34 +8,25 @@ use prost::{Message, EncodeError};
 use otel_multivariate_time_series::native_trace::NativeTraceHandler;
 use otel_multivariate_time_series::opentelemetry::proto::trace::v1::{Span, Status};
 
-mod json_trace;
-mod profiler;
-mod dataset;
-
-use json_trace::JsonTrace;
 use otel_multivariate_time_series::opentelemetry::proto::common::v1::{KeyValue, AnyValue, any_value};
 use crate::dataset::Dataset;
-use crate::profiler::ProfilableProtocol;
-use crate::profiler::Profiler;
+use crate::profiler::{Profiler,ProfilableProtocol};
+use crate::json_trace::JsonTrace;
 
 struct Test {
-    dataset: Dataset,
+    dataset: Dataset<JsonTrace>,
     trace_handler: NativeTraceHandler,
 }
 
-fn main() -> Result<(), Error> {
-    let mut test = Test::new("trace_samples.json"  );
-    let mut profiler = Profiler::new();
-    profiler.profile(&mut test, vec![10, 100, 1000], 1);
-    dbg!(profiler);
-
-    Ok(())
+pub fn profile(profiler: &mut Profiler, dataset: &Dataset<JsonTrace>, max_iter: usize) {
+    let mut test = Test::new(dataset  );
+    profiler.profile(&mut test, max_iter);
 }
 
 impl Test {
-    pub fn new(trace_file: &str) -> Self {
+    pub fn new(dataset: &Dataset<JsonTrace>) -> Self {
         Self {
-            dataset: Dataset::new(trace_file),
+            dataset: dataset.clone(),
             trace_handler: NativeTraceHandler::new(),
         }
     }
@@ -75,17 +66,35 @@ pub fn json_trace_to_span(json_trace: JsonTrace) -> Span {
 
 impl ProfilableProtocol for Test {
     fn name(&self) -> String {
-        "otel_trace_v1".into()
+        "Trace ref impl".into()
+    }
+
+    fn init_batch_size(&mut self, batch_size: usize) {
     }
 
     fn dataset_size(&self) -> usize {
-        self.dataset.traces.len()
+        self.dataset.values.len()
     }
 
     fn create_batch(&mut self, start_at: usize, size: usize) {
-        for json_trace in self.dataset.traces[start_at..start_at+size].to_vec() {
+        for json_trace in self.dataset.values[start_at..start_at+size].to_vec() {
             self.trace_handler.record(json_trace_to_span(json_trace));
         }
+    }
+
+    fn process(&self) -> String {
+        let mut sum = 0;
+
+        for span in &self.trace_handler.resource_spans.instrumentation_library_spans[0].spans {
+            sum += span.kind;
+        }
+        for span in &self.trace_handler.resource_spans.instrumentation_library_spans[0].spans {
+            if let Some(status) = &span.status {
+                sum += status.code;
+            }
+        }
+
+        format!("{}", sum)
     }
 
     fn serialize(&self) -> Result<Vec<u8>,EncodeError> {

@@ -105,40 +105,6 @@ impl OpenTelemetryEvent for JsonTrace {
     }
 
     fn record_into(self, handler: &mut EventBatchHandler<Self>) where Self: Sized {
-        if handler.resource_events.instrumentation_library_events[0].batches[0].size == handler.batch_policy.max_size {
-            let mut buf: Vec<u8> = Vec::with_capacity(200);
-
-            handler.resource_events.encode(&mut buf).unwrap();
-            println!("{}", buf.len());
-
-            let batch = &mut handler.resource_events.instrumentation_library_events[0].batches[0];
-
-            batch.start_time_unix_nano_column.clear();
-            batch.end_time_unix_nano_column.clear();
-
-            batch.i64_values[0].values.clear();
-            reset_validity_bitmap(&mut batch.i64_values[0].validity_bitmap);
-            batch.i64_values[1].values.clear();
-            reset_validity_bitmap(&mut batch.i64_values[1].validity_bitmap);
-
-            batch.string_values[0].values.clear();
-            batch.string_values[1].values.clear();
-            batch.string_values[2].values.clear();
-            reset_validity_bitmap(&mut batch.string_values[2].validity_bitmap);
-            batch.string_values[3].values.clear();
-            reset_validity_bitmap(&mut batch.string_values[3].validity_bitmap);
-            batch.string_values[4].values.clear();
-            batch.string_values[5].values.clear();
-            reset_validity_bitmap(&mut batch.string_values[5].validity_bitmap);
-            batch.size = 0;
-
-            let attributes = &mut batch.auxiliary_entities[0];
-            attributes.parent_ranks.clear();
-            attributes.string_values[0].values.clear();
-            attributes.string_values[1].values.clear();
-            attributes.size = 0;
-        }
-
         let batch = &mut handler.resource_events.instrumentation_library_events[0].batches[0];
 
         batch.start_time_unix_nano_column.push(self.evt.start_time_utc.timestamp_nanos() as u64);

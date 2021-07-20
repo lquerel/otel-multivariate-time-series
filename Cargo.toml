@@ -18,10 +18,12 @@ plotters = "0.3"
 thiserror = "1.0"
 erased-serde = "0.3"
 arrow = "4"
-jemalloc-ctl = "0.1.4"
+comfy-table = "4.0.1"
 
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
-jemallocator = "0.3.2"
+#jemalloc-ctl = "0.1.4"
+#
+#[target.'cfg(not(target_env = "msvc"))'.dependencies]
+#jemallocator = "0.3.2"
 
 [build-dependencies]
-prost-build = { version = "0.7" }
+prost-build = { version = "0.8" }

@@ -5,6 +5,8 @@ use crate::opentelemetry::proto::common::v1::InstrumentationLibrary;
 use serde_json::{Value, Number, Map};
 use arrow::datatypes::Schema;
 use crate::opentelemetry::proto::arrow_events::v1 as arrow_events;
+use prost::{Message, EncodeError};
+use bytes::Bytes;
 
 #[derive(Debug, Clone)]
 pub struct BatchPolicy {
@@ -129,6 +131,43 @@ impl BatchPolicy {
 }
 
 impl<T> EventBatchHandler<T> where T: OpenTelemetryEvent {
+    pub fn new(batch_policy: BatchPolicy) -> Self {
+        EventBatchHandler {
+            schema_url: T::urn(),
+            batch_policy: batch_policy.clone(),
+            phantom_data: PhantomData::default(),
+            resource_events: ResourceEvents {
+                resource: Some(Resource {
+                    attributes: vec![],
+                    dropped_attributes_count: 0,
+                }),
+                instrumentation_library_events: vec![
+                    InstrumentationLibraryEvents {
+                        instrumentation_library: Some(InstrumentationLibrary { name: "otel-rust".into(), version: "1.0".into() }),
+                        batches: vec![
+                            BatchEvent {
+                                schema_url: T::urn(),
+                                size: 0,
+                                start_time_unix_nano_column: Vec::with_capacity(batch_policy.max_size as usize),
+                                end_time_unix_nano_column: Vec::with_capacity(batch_policy.max_size as usize),
+                                i64_values: T::int64_columns(&batch_policy),
+                                f64_values: T::double_columns(&batch_policy),
+                                string_values: T::string_columns(&batch_policy),
+                                bool_values: T::bool_columns(&batch_policy),
+                                bytes_values: T::bytes_columns(&batch_policy),
+                                i64_summary_values: T::int64_summary_columns(&batch_policy),
+                                f64_summary_values: T::double_summary_columns(&batch_policy),
+                                auxiliary_entities: T::auxiliary_entities(&batch_policy),
+                            }
+                        ],
+                        dropped_events_count: 0,
+                    }
+                ],
+                schema_url: "".into(),
+            },
+        }
+    }
+
     pub fn to_json_value(&self) -> Value {
         let mut values = vec![];
 
@@ -167,7 +206,7 @@ impl<T> EventBatchHandler<T> where T: OpenTelemetryEvent {
 
                                 auxiliary_values.push(Value::Object(json_object));
                             } else {
-                                if let Some(json_object) = values[first_event_rank+parent_rank].as_object_mut() {
+                                if let Some(json_object) = values[first_event_rank + parent_rank].as_object_mut() {
                                     json_object.insert(auxiliary_entity.parent_column.clone(), Value::Array(auxiliary_values));
                                 }
                                 auxiliary_values = vec![];
@@ -183,7 +222,7 @@ impl<T> EventBatchHandler<T> where T: OpenTelemetryEvent {
                             }
                         }
                         if !auxiliary_values.is_empty() {
-                            if let Some(json_object) = values[first_event_rank+parent_rank].as_object_mut() {
+                            if let Some(json_object) = values[first_event_rank + parent_rank].as_object_mut() {
                                 json_object.insert(auxiliary_entity.parent_column.clone(), Value::Array(auxiliary_values));
                             }
                         }
@@ -195,7 +234,7 @@ impl<T> EventBatchHandler<T> where T: OpenTelemetryEvent {
         Value::Array(values)
     }
 
-    fn insert_i64_values(json_object: &mut Map<String,Value>, i64_values: &[Int64Column], rank: usize) {
+    fn insert_i64_values(json_object: &mut Map<String, Value>, i64_values: &[Int64Column], rank: usize) {
         for column in i64_values {
             if column.validity_bitmap.is_empty() || is_valid_value(&column.validity_bitmap, rank) {
                 json_object.insert(column.name.clone(), Value::Number(Number::from(column.values[rank])));
@@ -203,7 +242,7 @@ impl<T> EventBatchHandler<T> where T: OpenTelemetryEvent {
         }
     }
 
-    fn insert_f64_values(json_object: &mut Map<String,Value>, f64_values: &[DoubleColumn], rank: usize) {
+    fn insert_f64_values(json_object: &mut Map<String, Value>, f64_values: &[DoubleColumn], rank: usize) {
         for column in f64_values {
             if column.validity_bitmap.is_empty() || is_valid_value(&column.validity_bitmap, rank) {
                 let number = Number::from_f64(column.values[rank]);
@@ -214,7 +253,7 @@ impl<T> EventBatchHandler<T> where T: OpenTelemetryEvent {
         }
     }
 
-    fn insert_string_values(json_object: &mut Map<String,Value>, string_values: &[StringColumn], rank: usize) {
+    fn insert_string_values(json_object: &mut Map<String, Value>, string_values: &[StringColumn], rank: usize) {
         for column in string_values {
             if column.validity_bitmap.is_empty() || is_valid_value(&column.validity_bitmap, rank) {
                 json_object.insert(column.name.clone(), Value::String(column.values[rank].clone()));
@@ -222,7 +261,7 @@ impl<T> EventBatchHandler<T> where T: OpenTelemetryEvent {
         }
     }
 
-    fn insert_bool_values(json_object: &mut Map<String,Value>, bool_values: &[BoolColumn], rank: usize) {
+    fn insert_bool_values(json_object: &mut Map<String, Value>, bool_values: &[BoolColumn], rank: usize) {
         for column in bool_values {
             if column.validity_bitmap.is_empty() || is_valid_value(&column.validity_bitmap, rank) {
                 json_object.insert(column.name.clone(), Value::Bool(column.values[rank]));
@@ -239,40 +278,7 @@ impl EventCollector {
     }
 
     pub fn event_handler<T: OpenTelemetryEvent>(&self) -> EventBatchHandler<T> {
-        EventBatchHandler {
-            schema_url: T::urn(),
-            batch_policy: self.default_batch_policy.clone(),
-            phantom_data: PhantomData::default(),
-            resource_events: ResourceEvents {
-                resource: Some(Resource {
-                    attributes: vec![],
-                    dropped_attributes_count: 0,
-                }),
-                instrumentation_library_events: vec![
-                    InstrumentationLibraryEvents {
-                        instrumentation_library: Some(InstrumentationLibrary { name: "otel-rust".into(), version: "1.0".into() }),
-                        batches: vec![
-                            BatchEvent {
-                                schema_url: T::urn(),
-                                size: 0,
-                                start_time_unix_nano_column: Vec::with_capacity(self.default_batch_policy.max_size as usize),
-                                end_time_unix_nano_column: Vec::with_capacity(self.default_batch_policy.max_size as usize),
-                                i64_values: T::int64_columns(&self.default_batch_policy),
-                                f64_values: T::double_columns(&self.default_batch_policy),
-                                string_values: T::string_columns(&self.default_batch_policy),
-                                bool_values: T::bool_columns(&self.default_batch_policy),
-                                bytes_values: T::bytes_columns(&self.default_batch_policy),
-                                i64_summary_values: T::int64_summary_columns(&self.default_batch_policy),
-                                f64_summary_values: T::double_summary_columns(&self.default_batch_policy),
-                                auxiliary_entities: T::auxiliary_entities(&self.default_batch_policy),
-                            }
-                        ],
-                        dropped_events_count: 0,
-                    }
-                ],
-                schema_url: "".into(),
-            },
-        }
+        EventBatchHandler::new(self.default_batch_policy.clone())
     }
 
     pub fn arrow_event_handler<T: OpenTelemetryArrowEvent>(&self) -> ArrowEventBatchHandler<T> {
@@ -309,8 +315,73 @@ impl EventCollector {
 
 impl<T: OpenTelemetryEvent> EventBatchHandler<T> {
     pub fn record(&mut self, event: T) -> Result<(), Error> {
+        if self.resource_events.instrumentation_library_events[0].batches[0].size == self.batch_policy.max_size {
+            self.reset_batch_event();
+        }
+
         event.record_into(self);
         Ok(())
+    }
+
+    pub fn serialize(&self) -> Result<Vec<u8>, EncodeError> {
+        let mut buf: Vec<u8> = Vec::new();
+        self.resource_events.encode(&mut buf)?;
+        Ok(buf)
+    }
+
+    pub fn deserialize(&mut self, buf: Vec<u8>) {
+        self.resource_events = ResourceEvents::decode(Bytes::from(buf)).unwrap();
+    }
+
+    pub fn reset_batch_event(&mut self) {
+        let batch = &mut self.resource_events.instrumentation_library_events[0].batches[0];
+
+        batch.start_time_unix_nano_column.clear();
+        batch.end_time_unix_nano_column.clear();
+
+        for column in batch.i64_values.iter_mut() {
+            column.values.clear();
+            reset_validity_bitmap(&mut column.validity_bitmap);
+        }
+
+        for column in batch.f64_values.iter_mut() {
+            column.values.clear();
+            reset_validity_bitmap(&mut column.validity_bitmap);
+        }
+
+        for column in batch.string_values.iter_mut() {
+            column.values.clear();
+            reset_validity_bitmap(&mut column.validity_bitmap);
+        }
+
+        batch.size = 0;
+
+        for auxiliary_entity in batch.auxiliary_entities.iter_mut() {
+            auxiliary_entity.parent_ranks.clear();
+
+            for column in auxiliary_entity.i64_values.iter_mut() {
+                column.values.clear();
+                reset_validity_bitmap(&mut column.validity_bitmap);
+            }
+
+            for column in auxiliary_entity.f64_values.iter_mut() {
+                column.values.clear();
+                reset_validity_bitmap(&mut column.validity_bitmap);
+            }
+
+            for column in auxiliary_entity.string_values.iter_mut() {
+                column.values.clear();
+                reset_validity_bitmap(&mut column.validity_bitmap);
+            }
+
+            auxiliary_entity.size = 0;
+        }
+
+        let attributes = &mut batch.auxiliary_entities[0];
+        attributes.parent_ranks.clear();
+        attributes.string_values[0].values.clear();
+        attributes.string_values[1].values.clear();
+        attributes.size = 0;
     }
 }
 
@@ -334,7 +405,7 @@ pub fn is_valid_value(validity_bitmap: &Vec<u8>, nth_bit: usize) -> bool {
 
 #[inline(always)]
 pub fn validity_bitmap(size: usize) -> Vec<u8> {
-    vec![0; size]
+    vec![0; size/8 + if size%8 > 0 { 1} else {0}]
 }
 
 #[inline(always)]
@@ -350,7 +421,7 @@ mod test {
 
     #[test]
     fn test() {
-        let size = (100 + (8 - 1))/8;
+        let size = (100 + (8 - 1)) / 8;
         let mut validity_bitmap: Vec<u8> = validity_bitmap(size);
 
         set_nth_bit(&mut validity_bitmap, 0);

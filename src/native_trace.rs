@@ -5,7 +5,7 @@ use prost::{Message, EncodeError};
 use bytes::Bytes;
 
 pub struct NativeTraceHandler {
-    resource_spans: ResourceSpans,
+    pub resource_spans: ResourceSpans,
 }
 
 impl NativeTraceHandler {

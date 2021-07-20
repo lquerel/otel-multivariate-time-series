@@ -4,21 +4,21 @@ use std::error::Error;
 use serde::Deserialize;
 use chrono::{DateTime, Utc};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MultivariateDataPoint {
     pub ts: DateTime<Utc>,
     pub source_id: String,
     pub evt: Event,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Event {
     pub fields: Fields,
     pub tags: Tags,
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Tags {
     pub method: String,
     #[serde(rename="dnsLookupMs_label_class")]
@@ -36,7 +36,7 @@ pub struct Tags {
     pub tcp_connection_ms_label_class: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Fields {
     #[serde(rename="dnsLookupMs")]
     pub dns_lookup_ms: i64,
