@@ -20,6 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     otel_v1_trace_example::profile(&mut profiler, &dataset,max_iter);
     generic_attr_trace_example::profile(&mut profiler, &dataset,max_iter);
 
+    profiler.check_processing_results();
     profiler.print_results();
     profiler.to_csv("trace");
 

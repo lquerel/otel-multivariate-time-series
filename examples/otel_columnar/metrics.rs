@@ -40,13 +40,16 @@ impl ProfilableProtocol for Test {
     }
 
     fn process(&self) -> String {
-        let mut sum = 0;
+        let mut sum = 0i64;
 
         let batch = &self.resource_events.as_ref().expect("resource events not found").instrumentation_library_events[0].batches[0];
         let tls_handshake_ms = &batch.i64_values[0];
-        sum += tls_handshake_ms.values.iter().sum::<i64>() as i32;
+        sum += tls_handshake_ms.values.iter().sum::<i64>();
         let dns_lookup_ms = &batch.i64_values[1];
-        sum += dns_lookup_ms.values.iter().sum::<i64>() as i32;
+        sum += dns_lookup_ms.values.iter().sum::<i64>();
+        let server_processing_ms = &batch.i64_values[2];
+        sum += *server_processing_ms.values.iter().min().expect("server processing values not found");
+        sum += *server_processing_ms.values.iter().max().expect("server processing values not found");
 
         format!("{}", sum)
     }

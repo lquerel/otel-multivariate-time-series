@@ -20,6 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     otel_columnar::metrics::profile(&mut profiler, &dataset, max_iter)?;
     otel_arrow::metrics::profile(&mut profiler, &dataset, max_iter)?;
 
+    profiler.check_processing_results();
     profiler.print_results();
     profiler.to_csv("metrics")?;
 

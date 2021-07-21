@@ -60,6 +60,24 @@ impl ProfilableProtocol for Test {
                 }
             }
         }
+        if let Some(Data::Gauge(gauge)) = &lib_metrics.metrics[2].data {
+            let mut min = i64::MAX;
+            for value in &gauge.data_points {
+                if let Some(number_data_point::Value::AsInt(value)) = &value.value {
+                    min = min.min(*value);
+                }
+            }
+            sum += min;
+        }
+        if let Some(Data::Gauge(gauge)) = &lib_metrics.metrics[2].data {
+            let mut max = i64::MIN;
+            for value in &gauge.data_points {
+                if let Some(number_data_point::Value::AsInt(value)) = &value.value {
+                    max = max.max(*value);
+                }
+            }
+            sum += max;
+        }
 
         format!("{}", sum)
     }
@@ -285,6 +303,12 @@ pub fn gen_standard_metrics(time_series: &[MultivariateDataPoint]) -> ResourceMe
                         data: Some(Data::Gauge(Gauge { data_points: dns_lookup_ms_points })),
                     },
                     Metric {
+                        name: "server_processing_ms".into(),
+                        description: "".into(),
+                        unit: "".into(),
+                        data: Some(Data::Gauge(Gauge { data_points: server_processing_ms_points })),
+                    },
+                    Metric {
                         name: "size".into(),
                         description: "".into(),
                         unit: "By".into(),
@@ -307,12 +331,6 @@ pub fn gen_standard_metrics(time_series: &[MultivariateDataPoint]) -> ResourceMe
                         description: "".into(),
                         unit: "".into(),
                         data: Some(Data::Gauge(Gauge { data_points: health_status_points })),
-                    },
-                    Metric {
-                        name: "server_processing_ms".into(),
-                        description: "".into(),
-                        unit: "".into(),
-                        data: Some(Data::Gauge(Gauge { data_points: server_processing_ms_points })),
                     },
                     Metric {
                         name: "tcp_connection_ms".into(),

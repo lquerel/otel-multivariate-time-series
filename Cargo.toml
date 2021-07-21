@@ -17,7 +17,7 @@ bytes = "1.0.1"
 plotters = "0.3"
 thiserror = "1.0"
 erased-serde = "0.3"
-arrow = "4"
+arrow = {version="5", features = ["simd"]}
 comfy-table = "4.0.1"
 
 #jemalloc-ctl = "0.1.4"
@@ -27,3 +27,8 @@ comfy-table = "4.0.1"
 
 [build-dependencies]
 prost-build = { version = "0.8" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"

@@ -54,6 +54,8 @@ struct BatchSummary {
     processing_sec: Summary,
     serialization_sec: Summary,
     deserialization_sec: Summary,
+    total_time_sec: Summary,
+    processing_results: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -176,10 +178,10 @@ impl Profiler {
             let mut processing = Metric::new();
             let mut serialization = Metric::new();
             let mut deserialization = Metric::new();
+            let mut total_time = Metric::new();
+            let mut processing_results = vec![];
 
             otel_impl.init_batch_size(*batch_size);
-
-            let mut process_sum = 0;
 
             for _ in 0..max_iter {
                 let max_batch_count = otel_impl.dataset_size() / *batch_size;
@@ -196,8 +198,8 @@ impl Profiler {
 
                     // Process
                     let result = otel_impl.process();
-                    process_sum += result.len();
                     let after_processing = Instant::now();
+                    processing_results.push(result);
 
                     // Serialization
                     let buffer = otel_impl.serialize()?;
@@ -208,6 +210,7 @@ impl Profiler {
                     let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
                     e.write_all(&buffer)?;
                     compressed_size.record(e.finish().unwrap().len() as f64);
+                    let after_compression = Instant::now();
 
                     // Deserialization
                     otel_impl.deserialize(buffer);
@@ -219,12 +222,16 @@ impl Profiler {
                     batch_creation.record((after_batch_creation - start).as_secs_f64());
                     processing.record((after_processing - after_batch_creation).as_secs_f64());
                     serialization.record((after_serialization - after_processing).as_secs_f64());
-                    deserialization.record((after_deserialization - after_serialization).as_secs_f64());
+                    deserialization.record((after_deserialization - after_compression).as_secs_f64());
+
+                    total_time.record(
+                        (after_batch_creation - start).as_secs_f64()
+                            + (after_serialization - after_processing).as_secs_f64()
+                            + (after_deserialization - after_compression).as_secs_f64()
+                    );
                 }
                 otel_impl.clear();
             }
-
-            Self::consume(process_sum);
 
             self.benchmarks
                 .last_mut()
@@ -238,9 +245,30 @@ impl Profiler {
                     processing_sec: processing.compute_summary(),
                     serialization_sec: serialization.compute_summary(),
                     deserialization_sec: deserialization.compute_summary(),
+                    total_time_sec: total_time.compute_summary(),
+                    processing_results,
                 });
         }
         Ok(())
+    }
+
+    pub fn check_processing_results(&self) {
+        for batch_idx in 0..self.batch_sizes.len() {
+            if self.benchmarks.is_empty() {
+                continue;
+            }
+
+            let mut ref_processing_results = None;
+            for result in self.benchmarks.iter() {
+                if let Some(ref_processing_results) = ref_processing_results.as_ref() {
+                    if *ref_processing_results != result.summaries[batch_idx].processing_results {
+                        panic!("Processing results not consistent across the different implementations");
+                    }
+                } else {
+                    ref_processing_results = Some(result.summaries[batch_idx].processing_results.clone());
+                }
+            }
+        }
     }
 
     pub fn print_results(&self) {
@@ -269,20 +297,23 @@ impl Profiler {
                 values.insert(key, batch_summary.serialization_sec.clone());
                 let key = format!("{}:{}:{}", result.bench_name, batch_summary.batch_size, "deserialization_sec");
                 values.insert(key, batch_summary.deserialization_sec.clone());
+                let key = format!("{}:{}:{}", result.bench_name, batch_summary.batch_size, "total_time_sec");
+                values.insert(key, batch_summary.total_time_sec.clone());
             }
         }
 
-        self.add_section("Batch creation (ms)", "batch_creation_sec", &mut table, &mut values,|value| value * 1000.0);
-        self.add_section("Batch processing (ms)", "processing_sec", &mut table, &mut values,|value| value * 1000.0);
-        self.add_section("Serialization (ms)", "serialization_sec", &mut table, &mut values,|value| value * 1000.0);
+        self.add_section("Batch creation (ms)", "batch_creation_sec", &mut table, &mut values, |value| value * 1000.0);
+        self.add_section("Batch processing (ms)", "processing_sec", &mut table, &mut values, |value| value * 1000.0);
+        self.add_section("Serialization (ms)", "serialization_sec", &mut table, &mut values, |value| value * 1000.0);
         self.add_section("Compressed size (bytes)", "compressed_size_byte", &mut table, &mut values, |value| value);
-        self.add_section("Uncompressed size (bytes)", "uncompressed_size_byte", &mut table, &mut values,|value| value);
-        self.add_section("Deserialisation (ms)", "deserialization_sec", &mut table, &mut values,|value| value * 1000.0);
+        self.add_section("Uncompressed size (bytes)", "uncompressed_size_byte", &mut table, &mut values, |value| value);
+        self.add_section("Deserialisation (ms)", "deserialization_sec", &mut table, &mut values, |value| value * 1000.0);
+        self.add_section("Total time (ms)", "total_time_sec", &mut table, &mut values, |value| value * 1000.0);
 
         println!("{}", table);
     }
 
-    fn add_section(&self, label: &str, step: &str, table: &mut Table, values: &mut HashMap<String, Summary>,transform: fn(f64) -> f64) {
+    fn add_section(&self, label: &str, step: &str, table: &mut Table, values: &mut HashMap<String, Summary>, transform: fn(f64) -> f64) {
         table.add_row(vec![
             Cell::new(label).fg(Color::Green).add_attribute(Attribute::Bold),
             Cell::new(""),
@@ -345,6 +376,11 @@ impl Profiler {
             |summary| &summary.deserialization_sec,
             |value| value * 1000.0,
         )?;
+        self.write_csv_values(
+            &mut LineWriter::new(File::create(format!("{}_total_time_ms.csv", file_prefix))?),
+            |summary| &summary.total_time_sec,
+            |value| value * 1000.0,
+        )?;
 
         Ok(())
     }
@@ -358,7 +394,6 @@ impl Profiler {
         }
         file.write_all(b"\n")?;
 
-        // processing_sec values
         for (batch_idx, batch_size) in self.batch_sizes.iter().enumerate() {
             if self.benchmarks.is_empty() {
                 continue;
@@ -377,8 +412,6 @@ impl Profiler {
 
         Ok(())
     }
-
-    fn consume(_value: usize) {}
 
     // ToDo build charts with plotly.rs
 }
