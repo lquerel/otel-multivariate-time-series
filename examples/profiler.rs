@@ -9,6 +9,7 @@ use comfy_table::{Table, Cell, Color, Attribute, ContentArrangement};
 use std::fmt::{Display, Formatter};
 use comfy_table::presets::UTF8_FULL;
 use std::fs::File;
+use flate2::write::ZlibDecoder;
 
 // #[cfg(not(target_env = "msvc"))]
 // use jemallocator::Jemalloc;
@@ -54,6 +55,8 @@ struct BatchSummary {
     processing_sec: Summary,
     serialization_sec: Summary,
     deserialization_sec: Summary,
+    compression_sec: Summary,
+    decompression_sec: Summary,
     total_time_sec: Summary,
     processing_results: Vec<String>,
 }
@@ -178,6 +181,8 @@ impl Profiler {
             let mut processing = Metric::new();
             let mut serialization = Metric::new();
             let mut deserialization = Metric::new();
+            let mut compression = Metric::new();
+            let mut decompression = Metric::new();
             let mut total_time = Metric::new();
             let mut processing_results = vec![];
 
@@ -203,14 +208,25 @@ impl Profiler {
 
                     // Serialization
                     let buffer = otel_impl.serialize()?;
-                    uncompressed_size.record(buffer.len() as f64);
                     let after_serialization = Instant::now();
+                    uncompressed_size.record(buffer.len() as f64);
 
                     // Compression
-                    let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
-                    e.write_all(&buffer)?;
-                    compressed_size.record(e.finish().unwrap().len() as f64);
+                    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+                    encoder.write_all(&buffer)?;
+                    let compressed_buffer = encoder.finish().unwrap();
                     let after_compression = Instant::now();
+                    compressed_size.record(compressed_buffer.len() as f64);
+
+                    // Decompression
+                    let mut uncompressed_buffer: Vec<u8> = vec![];
+                    let mut decoder = ZlibDecoder::new(uncompressed_buffer);
+                    decoder.write_all(&compressed_buffer[..])?;
+                    uncompressed_buffer = decoder.finish()?;
+                    let after_decompression = Instant::now();
+                    if buffer != uncompressed_buffer {
+                        panic!("inconcistency detected: original buffer is not equals to the buffer resulting from the compression/decompression process");
+                    }
 
                     // Deserialization
                     otel_impl.deserialize(buffer);
@@ -222,12 +238,17 @@ impl Profiler {
                     batch_creation.record((after_batch_creation - start).as_secs_f64());
                     processing.record((after_processing - after_batch_creation).as_secs_f64());
                     serialization.record((after_serialization - after_processing).as_secs_f64());
-                    deserialization.record((after_deserialization - after_compression).as_secs_f64());
+                    compression.record((after_compression - after_serialization).as_secs_f64());
+                    decompression.record((after_decompression - after_compression).as_secs_f64());
+                    deserialization.record((after_deserialization - after_decompression).as_secs_f64());
 
                     total_time.record(
                         (after_batch_creation - start).as_secs_f64()
+                            + (after_processing - after_batch_creation).as_secs_f64()
                             + (after_serialization - after_processing).as_secs_f64()
-                            + (after_deserialization - after_compression).as_secs_f64()
+                            + (after_compression - after_serialization).as_secs_f64()
+                            + (after_decompression - after_compression).as_secs_f64()
+                            + (after_deserialization - after_decompression).as_secs_f64()
                     );
                 }
                 otel_impl.clear();
@@ -245,6 +266,8 @@ impl Profiler {
                     processing_sec: processing.compute_summary(),
                     serialization_sec: serialization.compute_summary(),
                     deserialization_sec: deserialization.compute_summary(),
+                    compression_sec: compression.compute_summary(),
+                    decompression_sec: decompression.compute_summary(),
                     total_time_sec: total_time.compute_summary(),
                     processing_results,
                 });
@@ -297,6 +320,10 @@ impl Profiler {
                 values.insert(key, batch_summary.serialization_sec.clone());
                 let key = format!("{}:{}:{}", result.bench_name, batch_summary.batch_size, "deserialization_sec");
                 values.insert(key, batch_summary.deserialization_sec.clone());
+                let key = format!("{}:{}:{}", result.bench_name, batch_summary.batch_size, "compression_sec");
+                values.insert(key, batch_summary.compression_sec.clone());
+                let key = format!("{}:{}:{}", result.bench_name, batch_summary.batch_size, "decompression_sec");
+                values.insert(key, batch_summary.decompression_sec.clone());
                 let key = format!("{}:{}:{}", result.bench_name, batch_summary.batch_size, "total_time_sec");
                 values.insert(key, batch_summary.total_time_sec.clone());
             }
@@ -305,10 +332,12 @@ impl Profiler {
         self.add_section("Batch creation (ms)", "batch_creation_sec", &mut table, &mut values, |value| value * 1000.0);
         self.add_section("Batch processing (ms)", "processing_sec", &mut table, &mut values, |value| value * 1000.0);
         self.add_section("Serialization (ms)", "serialization_sec", &mut table, &mut values, |value| value * 1000.0);
-        self.add_section("Compressed size (bytes)", "compressed_size_byte", &mut table, &mut values, |value| value);
-        self.add_section("Uncompressed size (bytes)", "uncompressed_size_byte", &mut table, &mut values, |value| value);
+        self.add_section("Compression (ms)", "compression_sec", &mut table, &mut values, |value| value * 1000.0);
+        self.add_section("Decompression (ms)", "decompression_sec", &mut table, &mut values, |value| value * 1000.0);
         self.add_section("Deserialisation (ms)", "deserialization_sec", &mut table, &mut values, |value| value * 1000.0);
         self.add_section("Total time (ms)", "total_time_sec", &mut table, &mut values, |value| value * 1000.0);
+        self.add_section("Compressed size (bytes)", "compressed_size_byte", &mut table, &mut values, |value| value);
+        self.add_section("Uncompressed size (bytes)", "uncompressed_size_byte", &mut table, &mut values, |value| value);
 
         println!("{}", table);
     }
@@ -362,14 +391,14 @@ impl Profiler {
             |value| value * 1000.0,
         )?;
         self.write_csv_values(
-            &mut LineWriter::new(File::create(format!("{}_compressed_size_byte.csv", file_prefix))?),
-            |summary| &summary.compressed_size_byte,
-            |value| value,
+            &mut LineWriter::new(File::create(format!("{}_compression_ms.csv", file_prefix))?),
+            |summary| &summary.compression_sec,
+            |value| value * 1000.0,
         )?;
         self.write_csv_values(
-            &mut LineWriter::new(File::create(format!("{}_uncompressed_size_byte.csv", file_prefix))?),
-            |summary| &summary.uncompressed_size_byte,
-            |value| value,
+            &mut LineWriter::new(File::create(format!("{}_decompression_ms.csv", file_prefix))?),
+            |summary| &summary.decompression_sec,
+            |value| value * 1000.0,
         )?;
         self.write_csv_values(
             &mut LineWriter::new(File::create(format!("{}_deserialization_ms.csv", file_prefix))?),
@@ -380,6 +409,16 @@ impl Profiler {
             &mut LineWriter::new(File::create(format!("{}_total_time_ms.csv", file_prefix))?),
             |summary| &summary.total_time_sec,
             |value| value * 1000.0,
+        )?;
+        self.write_csv_values(
+            &mut LineWriter::new(File::create(format!("{}_compressed_size_byte.csv", file_prefix))?),
+            |summary| &summary.compressed_size_byte,
+            |value| value,
+        )?;
+        self.write_csv_values(
+            &mut LineWriter::new(File::create(format!("{}_uncompressed_size_byte.csv", file_prefix))?),
+            |summary| &summary.uncompressed_size_byte,
+            |value| value,
         )?;
 
         Ok(())

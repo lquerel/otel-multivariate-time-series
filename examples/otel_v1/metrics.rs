@@ -46,39 +46,48 @@ impl ProfilableProtocol for Test {
         let mut sum = 0;
 
         let lib_metrics = &self.resource_metrics.as_ref().expect("resource metrics not found").instrumentation_library_metrics[0];
-        if let Some(Data::Gauge(gauge)) = &lib_metrics.metrics[0].data {
-            for value in &gauge.data_points {
-                if let Some(number_data_point::Value::AsInt(value)) = &value.value {
-                    sum += *value;
-                }
-            }
-        }
-        if let Some(Data::Gauge(gauge)) = &lib_metrics.metrics[1].data {
-            for value in &gauge.data_points {
-                if let Some(number_data_point::Value::AsInt(value)) = &value.value {
-                    sum += *value;
-                }
-            }
-        }
-        if let Some(Data::Gauge(gauge)) = &lib_metrics.metrics[2].data {
-            let mut min = i64::MAX;
-            for value in &gauge.data_points {
-                if let Some(number_data_point::Value::AsInt(value)) = &value.value {
-                    min = min.min(*value);
-                }
-            }
-            sum += min;
-        }
-        if let Some(Data::Gauge(gauge)) = &lib_metrics.metrics[2].data {
-            let mut max = i64::MIN;
-            for value in &gauge.data_points {
-                if let Some(number_data_point::Value::AsInt(value)) = &value.value {
-                    max = max.max(*value);
-                }
-            }
-            sum += max;
-        }
 
+        for _ in 0..50 {
+            if let Some(Data::Gauge(gauge)) = &lib_metrics.metrics[0].data {
+                for value in &gauge.data_points {
+                    if let Some(number_data_point::Value::AsInt(value)) = &value.value {
+                        sum += *value;
+                    }
+                }
+            }
+            if let Some(Data::Gauge(gauge)) = &lib_metrics.metrics[1].data {
+                for value in &gauge.data_points {
+                    if let Some(number_data_point::Value::AsInt(value)) = &value.value {
+                        sum += *value;
+                    }
+                }
+            }
+            if let Some(Data::Gauge(gauge)) = &lib_metrics.metrics[2].data {
+                let mut min = i64::MAX;
+                for value in &gauge.data_points {
+                    if let Some(number_data_point::Value::AsInt(value)) = &value.value {
+                        min = min.min(*value);
+                    }
+                }
+                sum += min;
+            }
+            if let Some(Data::Gauge(gauge)) = &lib_metrics.metrics[2].data {
+                let mut max = i64::MIN;
+                for value in &gauge.data_points {
+                    if let Some(number_data_point::Value::AsInt(value)) = &value.value {
+                        max = max.max(*value);
+                    }
+                }
+                sum += max;
+            }
+            if let Some(Data::Gauge(gauge)) = &lib_metrics.metrics[7].data {
+                for value in &gauge.data_points {
+                    if let Some(number_data_point::Value::AsInt(value)) = &value.value {
+                        sum += *value;
+                    }
+                }
+            }
+        }
         format!("{}", sum)
     }
 

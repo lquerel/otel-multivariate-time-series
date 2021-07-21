@@ -53,38 +53,48 @@ impl ProfilableProtocol for Test {
         let mut sum = 0i64;
 
         if let Some(batch) = self.batch.as_ref() {
-            sum += batch.column(2)
-                .as_any()
-                .downcast_ref::<Int64Array>()
-                .expect("tls_handshake_ms column not accessible")
-                .iter()
-                .sum::<Option<i64>>()
-                .unwrap_or(0);
+            for _ in 0..50 {
+                sum += batch.column(2)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .expect("tls_handshake_ms column not accessible")
+                    .iter()
+                    .sum::<Option<i64>>()
+                    .unwrap_or(0);
 
-            sum += batch.column(3)
-                .as_any()
-                .downcast_ref::<Int64Array>()
-                .expect("dns_lookup_ms column not accessible")
-                .iter()
-                .sum::<Option<i64>>()
-                .unwrap_or(0);
+                sum += batch.column(3)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .expect("dns_lookup_ms column not accessible")
+                    .iter()
+                    .sum::<Option<i64>>()
+                    .unwrap_or(0);
 
-            sum += batch.column(4)
-                .as_any()
-                .downcast_ref::<Int64Array>()
-                .expect("dns_lookup_ms column not accessible")
-                .iter()
-                .min()
-                .unwrap_or(Some(0))
-                .expect("dns_lookup_ms column min not computable");
-            sum += batch.column(4)
-                .as_any()
-                .downcast_ref::<Int64Array>()
-                .expect("dns_lookup_ms column not accessible")
-                .iter()
-                .max()
-                .unwrap_or(Some(0))
-                .expect("dns_lookup_ms column min not computable");
+                sum += batch.column(4)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .expect("server_processing_ms column not accessible")
+                    .iter()
+                    .min()
+                    .unwrap_or(Some(0))
+                    .expect("server_processing_ms column min not computable");
+                sum += batch.column(4)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .expect("server_processing_ms column not accessible")
+                    .iter()
+                    .max()
+                    .unwrap_or(Some(0))
+                    .expect("server_processing_ms column min not computable");
+
+                sum += batch.column(5)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .expect("tcp_connection_ms column not accessible")
+                    .iter()
+                    .sum::<Option<i64>>()
+                    .unwrap_or(0);
+            }
         }
 
         format!("{}", sum)
