@@ -1,7 +1,5 @@
 use std::time::{Instant};
 use prost::EncodeError;
-use flate2::write::ZlibEncoder;
-use flate2::Compression;
 use std::io::{Write, LineWriter};
 use std::error::Error;
 use std::collections::HashMap;
@@ -9,7 +7,7 @@ use comfy_table::{Table, Cell, Color, Attribute, ContentArrangement};
 use std::fmt::{Display, Formatter};
 use comfy_table::presets::UTF8_FULL;
 use std::fs::File;
-use flate2::write::ZlibDecoder;
+use lz4_flex::{compress_prepend_size, decompress_size_prepended};
 
 // #[cfg(not(target_env = "msvc"))]
 // use jemallocator::Jemalloc;
@@ -212,17 +210,12 @@ impl Profiler {
                     uncompressed_size.record(buffer.len() as f64);
 
                     // Compression
-                    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-                    encoder.write_all(&buffer)?;
-                    let compressed_buffer = encoder.finish().unwrap();
+                    let compressed_buffer = compress_prepend_size(&buffer);
                     let after_compression = Instant::now();
                     compressed_size.record(compressed_buffer.len() as f64);
 
                     // Decompression
-                    let mut uncompressed_buffer: Vec<u8> = vec![];
-                    let mut decoder = ZlibDecoder::new(uncompressed_buffer);
-                    decoder.write_all(&compressed_buffer[..])?;
-                    uncompressed_buffer = decoder.finish()?;
+                    let uncompressed_buffer = decompress_size_prepended(&compressed_buffer).unwrap();
                     let after_decompression = Instant::now();
                     if buffer != uncompressed_buffer {
                         panic!("inconcistency detected: original buffer is not equals to the buffer resulting from the compression/decompression process");
@@ -374,7 +367,7 @@ impl Profiler {
         }
     }
 
-    pub fn to_csv(&self, file_prefix: &str) -> Result<(), Box<dyn Error>> {
+    pub fn export_to_multiple_csv_files(&self, file_prefix: &str) -> Result<(), Box<dyn Error>> {
         self.write_csv_values(
             &mut LineWriter::new(File::create(format!("{}_batch_creation_ms.csv", file_prefix))?),
             |summary| &summary.batch_creation_sec,
@@ -443,6 +436,60 @@ impl Profiler {
                 let mut line = format!("{},{}", batch_size, sample_idx);
                 for result in self.benchmarks.iter() {
                     line.push_str(&format!(",{}", transform(summary_sel(&result.summaries[batch_idx]).values[sample_idx])));
+                }
+                line.push_str("\n");
+                file.write_all(line.as_bytes())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn export_single_csv_file(&self, file_prefix: &str) -> Result<(), Box<dyn Error>> {
+        let mut file = LineWriter::new(File::create(format!("{}.csv", file_prefix))?);
+
+        file.write_all(b"batch_size,iteration")?;
+        for result in self.benchmarks.iter() {
+            file.write_all(format!(",{}_batch_creation_sec,{}_processing_sec,{}_serialization_sec,{}_compression_sec,{}_decompression_sec,{}_deserialization_sec,{}_total_time_sec,{}_compressed_size_byte,{}_uncompressed_size_byte",
+                                   result.bench_name,
+                                   result.bench_name,
+                                   result.bench_name,
+                                   result.bench_name,
+                                   result.bench_name,
+                                   result.bench_name,
+                                   result.bench_name,
+                                   result.bench_name,
+                                   result.bench_name,
+            ).as_bytes())?;
+        }
+        file.write_all(b"\n")?;
+
+        for (batch_idx, batch_size) in self.batch_sizes.iter().enumerate() {
+            if self.benchmarks.is_empty() {
+                continue;
+            }
+
+            let num_samples = self.benchmarks[0].summaries[batch_idx].batch_creation_sec.values.len();
+            for sample_idx in 0..num_samples {
+                let mut line = format!("{},{}", batch_size, sample_idx);
+                for result in self.benchmarks.iter() {
+                    let batch_creation_sec = result.summaries[batch_idx].batch_creation_sec.values[sample_idx] * 1000.0;
+                    let processing_sec = result.summaries[batch_idx].processing_sec.values[sample_idx] * 1000.0;
+                    let serialization_sec = result.summaries[batch_idx].serialization_sec.values[sample_idx] * 1000.0;
+                    let compression_sec = result.summaries[batch_idx].compression_sec.values[sample_idx] * 1000.0;
+                    let decompression_sec = result.summaries[batch_idx].decompression_sec.values[sample_idx] * 1000.0;
+                    let deserialization_sec = result.summaries[batch_idx].deserialization_sec.values[sample_idx] * 1000.0;
+                    let total_time_sec = result.summaries[batch_idx].total_time_sec.values[sample_idx] * 1000.0;
+                    let compressed_size_byte = result.summaries[batch_idx].compressed_size_byte.values[sample_idx];
+                    let uncompressed_size_byte = result.summaries[batch_idx].uncompressed_size_byte.values[sample_idx];
+
+                    line.push_str(&format!(",{},{},{},{},{},{},{},{},{}",
+                                           batch_creation_sec, processing_sec,
+                                           serialization_sec, compression_sec,
+                                           decompression_sec, deserialization_sec,
+                                           total_time_sec, compressed_size_byte,
+                                           uncompressed_size_byte
+                    ));
                 }
                 line.push_str("\n");
                 file.write_all(line.as_bytes())?;

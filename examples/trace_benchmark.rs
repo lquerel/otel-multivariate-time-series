@@ -10,6 +10,7 @@ use crate::profiler::Profiler;
 use crate::dataset::Dataset;
 use crate::json_trace::JsonTrace;
 
+// RUSTFLAGS="-C target-cpu=native" cargo +nightly run --release --example trace_benchmark
 fn main() -> Result<(), Box<dyn Error>> {
     let dataset: Dataset<JsonTrace> = Dataset::new("trace_samples.json");
 
@@ -22,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     profiler.check_processing_results();
     profiler.print_results();
-    profiler.to_csv("trace");
+    profiler.export_to_multiple_csv_files("trace");
 
     Ok(())
 }
