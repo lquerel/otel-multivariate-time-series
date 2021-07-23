@@ -7,7 +7,7 @@ This benchmark tests the 3 followings implementations:
 
 Note: OTEL columnar and OTEL arrow can be used to represent metrics, logs and traces.
 
-![/images/benchmark_overview.png]
+![benchmark overview](/images/benchmark_overview.png)
 
 For each implementation, the following operations are performed:
 * **Batch creation**: creation of multiple batches of different sizes.
