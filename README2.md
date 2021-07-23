@@ -50,6 +50,7 @@ Speed ups per operation of the **OTEL arrow** implementation compared OTEL v1 (b
 * Deserialization is **121.6 faster**
 * Total is **46.5 faster**
 
-Solarized dark             |  Solarized Ocean         |  Solarized Ocean
-:-------------------------:|:------------------------:|:-------------------------:
-![time spent OTEL v1](images/time_spent_otel_v1.png) | ![time spent OTEL v1](images/time_spent_otel_columnar.png) | ![time spent OTEL v1](images/time_spent_otel_arrow.png)
+Implementation 1 & 3       | Implementation 2         
+:-------------------------:|:------------------------:
+![time spent OTEL v1](images/time_spent_otel_v1.png) |![time spent OTEL v1](images/time_spent_otel_columnar.png) 
+![time spent OTEL v1](images/time_spent_otel_arrow.png)|
