@@ -54,3 +54,25 @@ Implementation 1 & 3       | Implementation 2
 :-------------------------:|:------------------------:
 ![time spent OTEL v1](images/time_spent_otel_v1.png) |![time spent OTEL v1](images/time_spent_otel_columnar.png) 
 ![time spent OTEL v1](images/time_spent_otel_arrow.png)|
+
+## Breakdown
+
+The following charts detail the results for the different operations.
+
+Batch creation     | Batch processing
+:-------------------------:|:------------------------:
+![time spent OTEL v1](images/batch_creation.png) |![time spent OTEL v1](images/batch_processing.png) 
+
+Batch creation     | Batch processing
+:-------------------------:|:------------------------:
+![time spent OTEL v1](images/serialization.png) |![time spent OTEL v1](images/compression.png) 
+
+Batch creation     | Batch processing
+:-------------------------:|:------------------------:
+![time spent OTEL v1](images/decompression.png) |![time spent OTEL v1](images/deserialization.png) 
+
+As expected the uncompressed size of the OTEL v1 implementation (after serialization) is significantly higher than the 2 other columnar-oriented implementations. Even after LZ4 compression the size of the data transmitted over the network is still better for the 2 columnar-oriented implementations.
+
+Batch creation     | Batch processing
+:-------------------------:|:------------------------:
+![time spent OTEL v1](images/compressed.png) |![time spent OTEL v1](images/uncompressed.png) 
