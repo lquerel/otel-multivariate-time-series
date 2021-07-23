@@ -7,7 +7,8 @@ This benchmark tests the 3 followings implementations:
 * **OTEL columnar** based on an extension of the OTEL protocol. In addition to the existing Metrics, Log and Trace object, this extension adds the generic type Event that supports a columnar representation of the data.
 * **OTEL arrow** based on an extension of the Event OTEL object embedding an [arrow](https://arrow.apache.org/) buffer.
 
-The internal structure of the resource object is described below.
+Each implementation is integrated in the OTEL protocol in a similar way. The variations of the internal structures are 
+described below.
 
 ![benchmark overview](images/benchmark_overview.svg)
 
