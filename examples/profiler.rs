@@ -445,14 +445,12 @@ impl Profiler {
         Ok(())
     }
 
-    pub fn export_single_csv_file(&self, file_prefix: &str) -> Result<(), Box<dyn Error>> {
-        let mut file = LineWriter::new(File::create(format!("{}.csv", file_prefix))?);
+    pub fn export_metrics_times_csv(&self, file_prefix: &str) -> Result<(), Box<dyn Error>> {
+        let mut file = LineWriter::new(File::create(format!("{}_times.csv", file_prefix))?);
 
         file.write_all(b"batch_size,iteration")?;
         for result in self.benchmarks.iter() {
-            file.write_all(format!(",{}_batch_creation_sec,{}_processing_sec,{}_serialization_sec,{}_compression_sec,{}_decompression_sec,{}_deserialization_sec,{}_total_time_sec,{}_compressed_size_byte,{}_uncompressed_size_byte",
-                                   result.bench_name,
-                                   result.bench_name,
+            file.write_all(format!(",{}_batch_creation_sec,{}_processing_sec,{}_serialization_sec,{}_compression_sec,{}_decompression_sec,{}_deserialization_sec,{}_total_time_sec",
                                    result.bench_name,
                                    result.bench_name,
                                    result.bench_name,
@@ -480,14 +478,48 @@ impl Profiler {
                     let decompression_sec = result.summaries[batch_idx].decompression_sec.values[sample_idx] * 1000.0;
                     let deserialization_sec = result.summaries[batch_idx].deserialization_sec.values[sample_idx] * 1000.0;
                     let total_time_sec = result.summaries[batch_idx].total_time_sec.values[sample_idx] * 1000.0;
-                    let compressed_size_byte = result.summaries[batch_idx].compressed_size_byte.values[sample_idx];
-                    let uncompressed_size_byte = result.summaries[batch_idx].uncompressed_size_byte.values[sample_idx];
 
-                    line.push_str(&format!(",{},{},{},{},{},{},{},{},{}",
+                    line.push_str(&format!(",{:.5},{:.5},{:.5},{:.5},{:.5},{:.5},{:.5}",
                                            batch_creation_sec, processing_sec,
                                            serialization_sec, compression_sec,
                                            decompression_sec, deserialization_sec,
-                                           total_time_sec, compressed_size_byte,
+                                           total_time_sec,
+                    ));
+                }
+                line.push_str("\n");
+                file.write_all(line.as_bytes())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn export_metrics_bytes_csv(&self, file_prefix: &str) -> Result<(), Box<dyn Error>> {
+        let mut file = LineWriter::new(File::create(format!("{}_bytes.csv", file_prefix))?);
+
+        file.write_all(b"batch_size,iteration")?;
+        for result in self.benchmarks.iter() {
+            file.write_all(format!(",{}_compressed_size_byte,{}_uncompressed_size_byte",
+                                   result.bench_name,
+                                   result.bench_name,
+            ).as_bytes())?;
+        }
+        file.write_all(b"\n")?;
+
+        for (batch_idx, batch_size) in self.batch_sizes.iter().enumerate() {
+            if self.benchmarks.is_empty() {
+                continue;
+            }
+
+            let num_samples = self.benchmarks[0].summaries[batch_idx].batch_creation_sec.values.len();
+            for sample_idx in 0..num_samples {
+                let mut line = format!("{},{}", batch_size, sample_idx);
+                for result in self.benchmarks.iter() {
+                    let compressed_size_byte = result.summaries[batch_idx].compressed_size_byte.values[sample_idx];
+                    let uncompressed_size_byte = result.summaries[batch_idx].uncompressed_size_byte.values[sample_idx];
+
+                    line.push_str(&format!(",{},{}",
+                                           compressed_size_byte,
                                            uncompressed_size_byte
                     ));
                 }

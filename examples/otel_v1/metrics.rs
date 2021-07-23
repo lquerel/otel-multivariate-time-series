@@ -28,7 +28,7 @@ pub fn profile(profiler: &mut Profiler, dataset: &Dataset<MultivariateDataPoint>
 
 impl ProfilableProtocol for Test {
     fn name(&self) -> String {
-        "Metrics ref impl".into()
+        "ref_impl".into()
     }
 
     fn init_batch_size(&mut self, _batch_size: usize) {

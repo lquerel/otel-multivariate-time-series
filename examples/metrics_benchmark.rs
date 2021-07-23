@@ -23,8 +23,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     profiler.check_processing_results();
     profiler.print_results();
-    profiler.export_to_multiple_csv_files("metrics")?;
-    profiler.export_single_csv_file("metrics")?;
+    profiler.export_metrics_times_csv("metrics")?;
+    profiler.export_metrics_bytes_csv("metrics")?;
 
     Ok(())
 }
