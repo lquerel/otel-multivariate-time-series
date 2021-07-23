@@ -25,13 +25,17 @@ For each implementation, the following operations are performed:
 
 ![steps](images/steps.svg)
 
-The dataset used for this benchmark can be found in the [git repository](https://github.com/lquerel/otel-multivariate-time-series). The multivariate time-series is composed of 9 labels (dimensions) and 8 metrics.
+The dataset used for this benchmark can be found [here](data/multivariate-time-series.json).
 
-## Total time
+Each event is composed of 9 labels (dimensions) and 8 metrics.
+
+## Comparative performance
 As demonstrated by the following chart, both the OTEL columnar and OTEL arrow are much more efficient than the current OTEL implementation.
 
 ![total time](images/total_time.png)
 
+## Speed up per operation
+### OTEL columnar
 Speed ups per operation of the **OTEL columnar** implementation compared OTEL v1 (batch size=10000):
 * Batch creation is 11.5 faster
 * Batch processing is **5.1 faster**
@@ -43,6 +47,7 @@ Speed ups per operation of the **OTEL columnar** implementation compared OTEL v1
 
 In this implementation most of the time is spent in the batch creation and deserialization steps.
 
+### OTEL arrow
 Speed ups per operation of the **OTEL arrow** implementation compared OTEL v1 (batch size=10000):
 * Batch creation is **31.1 faster**
 * Batch processing is 1.7 faster (need more attention)
@@ -51,6 +56,8 @@ Speed ups per operation of the **OTEL arrow** implementation compared OTEL v1 (b
 * Decompression is 10.7 faster
 * Deserialization is **121.6 faster**
 * Total is **46.5 faster**
+
+For more details see the following charts. 
 
 Implementation 1 & 3       | Implementation 2         
 :-------------------------:|:------------------------:
@@ -61,20 +68,37 @@ Implementation 1 & 3       | Implementation 2
 
 The following charts detail the results for the different operations.
 
+### Batch creation and batch processing
+
 Batch creation     | Batch processing
 :-------------------------:|:------------------------:
 ![time spent OTEL v1](images/batch_creation.png) |![time spent OTEL v1](images/batch_processing.png) 
 
-Batch creation     | Batch processing
+> Note: Need to test the new implementation of the Apache Arrow (arrow-rs v2).
+
+### Serialization and compression
+
+Serialization     | Compression
 :-------------------------:|:------------------------:
 ![time spent OTEL v1](images/serialization.png) |![time spent OTEL v1](images/compression.png) 
 
-Batch creation     | Batch processing
+### Decompression and deserialization
+Decompression     | Deserialization 
 :-------------------------:|:------------------------:
 ![time spent OTEL v1](images/decompression.png) |![time spent OTEL v1](images/deserialization.png) 
 
+### Buffer size (uncompressed and compressed)
+
 As expected the uncompressed size of the OTEL v1 implementation (after serialization) is significantly higher than the 2 other columnar-oriented implementations. Even after LZ4 compression the size of the data transmitted over the network is still better for the 2 columnar-oriented implementations.
 
-Batch creation     | Batch processing
+Uncompressed     | Compressed
 :-------------------------:|:------------------------:
-![time spent OTEL v1](images/compressed.png) |![time spent OTEL v1](images/uncompressed.png) 
+![time spent OTEL v1](images/uncompressed.png) |![time spent OTEL v1](images/compressed.png) 
+
+## Recommendations
+
+Embedding Apache Arrow in the OpenTelemetry protocol has multiple benefits:
+* Generic solution to support any kinds of events.
+* Better overall performance. 
+* Efficient data processing library available.
+* Direct integration with stream processing and database solutions.
