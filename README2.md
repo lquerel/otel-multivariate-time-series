@@ -1,6 +1,6 @@
-# Benchmark Results
+# Multivariate Metrics - Benchmark
 
-## Multivariate Metrics
+## Introduction
 
 This benchmark tests the 3 followings implementations:
 * **OTEL v1** based on the current univariate metric support.
@@ -12,6 +12,8 @@ The internal structure of the resource object is described below.
 ![benchmark overview](images/benchmark_overview.svg)
 
 > Note: OTEL columnar and OTEL arrow can be used to represent metrics, logs and traces.
+
+## Scenario
 
 For each implementation, the following operations are performed:
 * **Batch creation**: creation of multiple batches of different sizes.
