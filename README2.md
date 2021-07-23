@@ -38,7 +38,7 @@ As demonstrated by the following chart, both the OTEL columnar and OTEL arrow ar
 ## Analysis and Recommendations
 
 ### Generic representation
-[otel_sdk](images/otel_sdk.svg)
+![otel_sdk](images/otel_sdk.svg)
 
 ### Speed up per operation
 #### OTEL columnar
