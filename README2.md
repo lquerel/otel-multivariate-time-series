@@ -35,12 +35,7 @@ As demonstrated by the following chart, both the OTEL columnar and OTEL arrow ar
 
 ![total time](images/total_time.png)
 
-## Analysis and Recommendations
-
-### Generic representation
-![otel_sdk](images/otel_sdk.svg)
-
-### Speed up per operation
+### Speedup per operation
 #### OTEL columnar
 Speed ups per operation of the **OTEL columnar** implementation compared OTEL v1 (batch size=10000):
 * Batch creation is 11.5 faster
@@ -63,15 +58,31 @@ Speed ups per operation of the **OTEL arrow** implementation compared OTEL v1 (b
 * Deserialization is **121.6 faster**
 * Total is **46.5 faster**
 
-For more details see the breakdown section. 
+For more details see the breakdown section.
 
-### Recommendations
+## Analysis and Recommendations
 
-Embedding Apache Arrow in the OpenTelemetry protocol has multiple benefits:
-* Generic solution to support any kinds of events.
-* Better overall performance.
-* Efficient data processing library available.
-* Direct integration with stream processing and database solutions.
+Both the OTEL columnar and OTEL arrow alternatives are much more efficient for multivariate time series scenarios than 
+the current reference implementation. The columnar representation is fully exploited in the context of multivariate
+time-series as several measurements share the same collection of labels. We will not see the same impressive speedup
+for logs and traces but still the columnar approach should be beneficial in terms of memory allocation and data processing.
+
+As shown in the time spent per operation charts, serialization and deserialization are among the most costly operations
+for the current OTEL protocol. Moving to a columnar representation reduces dramatically the number of small objects 
+allocated, serialized, and deserialized providing a direct performance boost overall. The columnar orientation also 
+provide a more machine-friendly layout of the data to process a lot of similar data efficiently.
+
+Using a single internal representation for metrics, logs, and traces gives more flexibility to represent any kind of 
+structured events in the future. The following diagram describes that works.
+
+![otel_sdk](images/otel_sdk.svg)
+
+Overall, OTEL arrow is a clear winner mainly because of its super-fast serialization/deserialization layer. A second 
+benefit is the Apache Arrow eco-system itself. Arrow libraries are available in multiple languages, efficient 
+data processing libraries already exist, and more and more backend are able to produce or consume Apache Arrow buffers. 
+The following diagram summarizes the benefits.
+
+![otel_arrow benefits](images/otel_arrow.svg)
 
 ## Breakdown
 
